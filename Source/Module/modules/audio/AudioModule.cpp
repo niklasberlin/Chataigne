@@ -57,11 +57,11 @@ AudioModule::AudioModule(const String& name) :
 	moduleParams.addChildControllableContainer(&ltcParamsCC);
 	ltcFPS = ltcParamsCC.addEnumParameter("FPS", "The framerate to use to decode LTC");
 	ltcFPS->addOption("24", 24)->addOption("25", 25)->addOption("30", 30);
-	ltcFPS->defaultValue = 30;
-	ltcFPS->resetValue();
+	ltcFPS->setDefaultValue(30);
 	curLTCFPS = ltcFPS->getValueData();
 
 	ltcChannel = ltcParamsCC.addIntParameter("LTC Channel", "Enable and select the channel you want to use to decode LTC", 1, 1, 64);
+	ltcUseDate = ltcParamsCC.addBoolParameter("Use LTC Date", "Does the sending device use the date in the LTC user bits? (Almost always false)", false);
 
 	//Values
 	detectedVolume = valuesCC.addFloatParameter("Volume", "Volume of the audio input", 0, 0, 1);
@@ -87,6 +87,37 @@ AudioModule::AudioModule(const String& name) :
 	ltcTime = ltcCC.addFloatParameter("LTC Time", "Decoded LTC Time from the selected channel in parameters", 0, 0);
 	ltcTime->defaultUI = FloatParameter::TIME;
 
+
+	addChildControllableContainer(&hs);
+	controllableContainers.move(controllableContainers.indexOf(&hs), controllableContainers.indexOf(&valuesCC));
+
+	for (auto& c : valuesCC.controllables) c->setControllableFeedbackOnly(true);
+
+	defManager->add(CommandDefinition::createDef(this, "", "Play audio file", &PlayAudioFileCommand::create));
+
+	ltcDecoder.reset(ltc_decoder_create(1920, 32));
+
+	initSetup();
+}
+
+AudioModule::~AudioModule()
+{
+	graph.clear();
+
+	am.removeAudioCallback(&player);
+	player.setProcessor(nullptr);
+
+	am.removeAudioCallback(this);
+	am.removeChangeListener(this);
+}
+
+void AudioModule::initSetup()
+{
+	if (Thread::getCurrentThreadId() != MessageManager::getInstance()->getCurrentMessageThread())
+	{
+		MessageManager::callAsync([this]() { initSetup(); });
+		return;
+	}
 
 	//AUDIO
 	am.addAudioCallback(this);
@@ -123,25 +154,6 @@ AudioModule::AudioModule(const String& name) :
 
 	player.setProcessor(&graph);
 
-	addChildControllableContainer(&hs);
-	controllableContainers.move(controllableContainers.indexOf(&hs), controllableContainers.indexOf(&valuesCC));
-
-	for (auto& c : valuesCC.controllables) c->setControllableFeedbackOnly(true);
-
-	defManager->add(CommandDefinition::createDef(this, "", "Play audio file", &PlayAudioFileCommand::create));
-
-	ltcDecoder.reset(ltc_decoder_create(1920, 32));
-}
-
-AudioModule::~AudioModule()
-{
-	graph.clear();
-
-	am.removeAudioCallback(&player);
-	player.setProcessor(nullptr);
-
-	am.removeAudioCallback(this);
-	am.removeChangeListener(this);
 }
 
 void AudioModule::updateAudioSetup()
@@ -387,7 +399,23 @@ void AudioModule::audioDeviceIOCallbackWithContext(const float* const* inputChan
 			}
 		}
 
-		//Analysis
+
+
+		//Monitor
+		if (monitorParams.enabled->boolValue())
+		{
+			for (int j = 0; j < numActiveMonitorOutputs; j++)
+			{
+				int outputIndex = selectedMonitorOutChannels[j];
+				if (outputIndex >= numOutputChannels) continue;
+				FloatVectorOperations::addWithMultiply(outputChannelData[outputIndex], inputChannelData[i], monitorVolume->floatValue() * channelVolume, numSamples);
+			}
+		}
+	}
+
+	//Analysis
+	if (numInputChannels > 0)
+	{
 		analyzerManager.process(inputChannelData[0], numSamples);
 
 		if (ltcParamsCC.enabled->boolValue())
@@ -402,7 +430,7 @@ void AudioModule::audioDeviceIOCallbackWithContext(const float* const* inputChan
 				while (ltc_decoder_read(ltcDecoder.get(), &frame))
 				{
 					SMPTETimecode stime;
-					ltc_frame_to_time(&stime, &frame.ltc, 1);
+					ltc_frame_to_time(&stime, &frame.ltc, (ltcUseDate->boolValue() ? 1 : 0));
 
 					float time = stime.days * 3600 * 24 + stime.hours * 3600 + stime.mins * 60 + stime.secs + stime.frame * 1.0f / curLTCFPS;
 					ltcTime->setValue(time);
@@ -422,17 +450,6 @@ void AudioModule::audioDeviceIOCallbackWithContext(const float* const* inputChan
 					ltcFrameDropCount = 0;
 					ltcPlaying->setValue(true);
 				}
-			}
-		}
-
-		//Monitor
-		if (monitorParams.enabled->boolValue())
-		{
-			for (int j = 0; j < numActiveMonitorOutputs; j++)
-			{
-				int outputIndex = selectedMonitorOutChannels[j];
-				if (outputIndex >= numOutputChannels) continue;
-				FloatVectorOperations::addWithMultiply(outputChannelData[outputIndex], inputChannelData[i], monitorVolume->floatValue() * channelVolume, numSamples);
 			}
 		}
 	}
@@ -457,9 +474,19 @@ void AudioModule::itemAdded(FFTAnalyzer* item)
 	fftCC.addParameter(item->value);
 }
 
+void AudioModule::itemsAdded(Array<FFTAnalyzer*> items)
+{
+	for (auto& item : items) fftCC.addParameter(item->value);
+}
+
 void AudioModule::itemRemoved(FFTAnalyzer* item)
 {
 	fftCC.removeControllable(item->value);
+}
+
+void AudioModule::itemsRemoved(Array<FFTAnalyzer*> items)
+{
+	for (auto& item : items) fftCC.removeControllable(item->value);
 }
 
 

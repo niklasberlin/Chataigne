@@ -122,6 +122,7 @@
 #include "modules/http/HTTPModule.h"
 #include "modules/http/commands/HTTPCommand.h"
 
+#include "modules/midi/MIDIClock.h"
 #include "modules/midi/MIDIModule.h"
 #include "modules/midi/commands/MIDICommands.h"
 
@@ -167,6 +168,7 @@
 #include "modules/sequence/SequenceModule.h"
 
 #include "modules/serial/SerialModule.h"
+#include "modules/ble/BLEModule.h"
 
 #include "modules/controller/loupedeck/LoupedeckShape.h"
 #include "modules/controller/loupedeck/LoupedeckShapeManager.h"
@@ -197,6 +199,7 @@
 
 #include "modules/mqtt/MQTTModule.h"
 #include "modules/mqtt/commands/MQTTCommands.h"
+#include "modules/mqtt/ui/MQTTModuleUI.h"
 
 #include "modules/posistagenet/PosiStageNetModule.h"
 #include "modules/posistagenet/commands/PosiStageNetCommand.h"
@@ -211,5 +214,6 @@
 
 #include "modules/tcp/tcpserver/ui/TCPServerModuleUI.h"
 #include "modules/websocket/ui/WebSocketServerModuleUI.h"
+
 
 

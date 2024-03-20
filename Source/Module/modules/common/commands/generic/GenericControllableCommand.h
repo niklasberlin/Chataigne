@@ -29,15 +29,20 @@ public:
 	EnumParameter* valueOperator;
 	EnumParameter* componentOperator;
 	BoolParameter* loop;
+	BoolParameter* randomAlwaysUnique;
 
 	WeakReference<Parameter> value;
 	var dataToLoad;
 	var ghostValueData; // to keep when target is lost
+	var ghostValueParamLinkData;
 	var ghostOperator;
 	var ghostComponent;
 
 	FloatParameter* time;
 	std::unique_ptr<Automation> automation;
+
+	bool isUpdatingContent; //to avoid sending stuff when just updating target or component
+
 
 	virtual void updateComponentFromTarget();
 	virtual void updateValueFromTargetAndComponent();

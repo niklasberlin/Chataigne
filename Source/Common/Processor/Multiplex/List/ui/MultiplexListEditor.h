@@ -10,8 +10,53 @@
 
 #pragma once
 
-class NumberListEditor :
+class BaseMultiplexListEditor :
 	public BaseItemEditor
+{
+public:
+	BaseMultiplexListEditor(BaseMultiplexList* list, bool isRoot);
+	~BaseMultiplexListEditor();
+
+	BaseMultiplexList* baseList;
+	TextButton fillBT;
+
+	void resizedInternalHeaderItemInternal(Rectangle<int>& r) override;
+
+	void buttonClicked(Button* b) override;
+
+	virtual void addItemsToFillMenu(PopupMenu& p) {}
+	virtual void handleFillMenuResult(int result) {}
+
+	class ExpressionComponentWindow :
+		public Component,
+		public Button::Listener
+	{
+	public:
+		ExpressionComponentWindow(BaseMultiplexList* list);
+		~ExpressionComponentWindow() {}
+
+		BaseMultiplexList* list;
+
+		Label instructions;
+		TextEditor editor;
+		TextButton assignBT;
+		TextButton closeBT;
+
+		IntParameter startIndex;
+		IntParameter endIndex;
+		IntStepperUI startUI;
+		IntStepperUI endUI;
+
+		void resized() override;
+
+		void buttonClicked(Button* b) override;
+	};
+
+	std::unique_ptr<ExpressionComponentWindow> expressionWindow;
+};
+
+class NumberListEditor :
+	public BaseMultiplexListEditor
 {
 public:
 	NumberListEditor(MultiplexList<FloatParameter>* list, bool isRoot);
@@ -31,7 +76,7 @@ public:
 };
 
 class EnumMultiplexListEditor :
-	public BaseItemEditor
+	public BaseMultiplexListEditor
 {
 public:
 	EnumMultiplexListEditor(EnumMultiplexList* eList, bool isRoot);
@@ -80,8 +125,21 @@ public:
 	};
 };
 
+
+class TargetMultiplexListEditor :
+	public BaseMultiplexListEditor
+{
+public:
+	TargetMultiplexListEditor(TargetMultiplexList* list, bool isRoot);
+	~TargetMultiplexListEditor();
+
+	TargetMultiplexList* targetList;
+
+	virtual void addPopupMenuItems(PopupMenu*) override;
+};
+
 class CVPresetMultiplexListEditor :
-	public BaseItemEditor
+	public BaseMultiplexListEditor
 {
 public:
 	CVPresetMultiplexListEditor(CVPresetMultiplexList* eList, bool isRoot);
@@ -93,39 +151,18 @@ public:
 };
 
 class InputValueListEditor :
-	public BaseItemEditor
+	public BaseMultiplexListEditor
 {
 public:
 	InputValueListEditor(InputValueMultiplexList* eList, bool isRoot);
 	~InputValueListEditor();
 
-	TextButton fillBT;
 	InputValueMultiplexList* list;
 
-	void resizedInternalHeaderItemInternal(Rectangle<int>& r) override;
+	void addItemsToFillMenu(PopupMenu& p) override;
+	void handleFillMenuResult(int result) override;
 
-	void buttonClicked(Button* b) override;
-
-	class ExpressionComponentWindow :
-		public Component,
-		public Button::Listener
-	{
-	public:
-		ExpressionComponentWindow(InputValueMultiplexList* list);
-		~ExpressionComponentWindow() {}
-
-		InputValueMultiplexList* list;
-
-		Label instructions;
-		TextEditor editor;
-		TextButton assignBT;
-		TextButton closeBT;
-
-		void resized() override;
-
-		void buttonClicked(Button* b) override;
-	};
-
-	std::unique_ptr<ExpressionComponentWindow> expressionWindow;
+	void showRangeMenuAndFillFromControllables(Array<WeakReference<Controllable>> controllables);
 };
+
 

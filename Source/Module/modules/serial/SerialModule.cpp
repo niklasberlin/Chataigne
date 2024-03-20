@@ -8,14 +8,22 @@
   ==============================================================================
 */
 
+#include "Module/ModuleIncludes.h"
+
 SerialModule::SerialModule(const String& name) :
 	StreamingModule(name),
 	port(nullptr)
 {
 	portParam = new SerialDeviceParameter("Port", "Serial Port to connect", true);
+	portParam->openOnSet = false;
+
 	moduleParams.addParameter(portParam);
-	baudRate = moduleParams.addIntParameter("Baud Rate", "The connection speed. Common values are 9600, 57600, 115200", 115200, 9600, 1000000);
-	portParam->openBaudRate = baudRate->intValue();
+	baudRate = moduleParams.addIntParameter("Baud Rate", "The connection speed. Common values are 9600, 57600, 115200", 115200, 9600);
+	dtr = moduleParams.addBoolParameter("DTR", "Data Terminal Ready", false);
+	rts = moduleParams.addBoolParameter("RTS", "Request To Send", false);
+	portParam->setBaudrate(baudRate->intValue());
+	portParam->setDTR(dtr->boolValue());
+	portParam->setDTR(rts->boolValue());
 
 	isConnected = moduleParams.addBoolParameter("Is Connected", "This is checked if a serial port is connected.", false);
 	isConnected->setControllableFeedbackOnly(true);
@@ -69,6 +77,9 @@ bool SerialModule::setPortStatus(bool status)
 		if (port->isOpen()) port->close();
 	}
 
+	bool result = false;
+	if (port == nullptr) return result;
+
 	isConnected->setValue(port->isOpen());
 	return port->isOpen();
 }
@@ -89,10 +100,13 @@ void SerialModule::setCurrentPort(SerialDevice* _port)
 
 	if (port != nullptr)
 	{
-		port->addSerialDeviceListener(this);
 		setPortStatus(true);
-		lastOpenedPortID = port->info->deviceID;
-		portOpenedInternal();
+		if (port != nullptr)
+		{
+			port->addSerialDeviceListener(this);
+			lastOpenedPortID = port->info->deviceID;
+			portOpenedInternal();
+		}
 	}
 
 	serialModuleListeners.call(&SerialModuleListener::currentPortChanged);
@@ -118,13 +132,16 @@ void SerialModule::onControllableFeedbackUpdateInternal(ControllableContainer* c
 
 	if (c == baudRate)
 	{
-		portParam->openBaudRate = baudRate->intValue();
-		if (port != nullptr && port->isOpen())
-		{
-			SerialDevice* d = portParam->getDevice();
-			if (d != nullptr) d->setBaudRate(portParam->openBaudRate);
-		}
+		portParam->setBaudrate(baudRate->intValue());
 
+	}
+	else if (c == dtr)
+	{
+		portParam->setDTR(dtr->boolValue());
+	}
+	else if (c == rts)
+	{
+		portParam->setRTS(rts->boolValue());
 	}
 	if (c == portParam)
 	{
@@ -181,7 +198,7 @@ void SerialModule::portRemoved(SerialDevice*)
 	setCurrentPort(nullptr);
 }
 
-void SerialModule::serialDataReceived(const var& data)
+void SerialModule::serialDataReceived(SerialDevice*, const var& data)
 {
 	switch (port->mode)
 	{
@@ -204,6 +221,8 @@ void SerialModule::serialDataReceived(const var& data)
 		}
 		break;
 
+	default:
+		break;
 	}
 }
 
@@ -222,16 +241,19 @@ void SerialModule::loadJSONDataInternal(var data)
 
 void SerialModule::setupModuleFromJSONData(var data)
 {
+	Array<int> vidFilters;
+	Array<int> pidFilters;
+
 	if (data.hasProperty("vidFilter"))
 	{
 		var vidFilter = data.getProperty("vidFilter", "");
 		if (vidFilter.isArray())
 		{
-			for (int i = 0; i < vidFilter.size(); i++) portParam->vidFilters.add(vidFilter[i].toString().getHexValue32());
+			for (int i = 0; i < vidFilter.size(); i++) vidFilters.add(vidFilter[i].toString().getHexValue32());
 		}
 		else if (vidFilter.toString().isNotEmpty())
 		{
-			portParam->vidFilters.add(vidFilter.toString().getHexValue32());
+			vidFilters.add(vidFilter.toString().getHexValue32());
 		}
 	}
 
@@ -240,13 +262,15 @@ void SerialModule::setupModuleFromJSONData(var data)
 		var pidFilter = data.getProperty("pidFilter", "");
 		if (pidFilter.isArray())
 		{
-			for (int i = 0; i < pidFilter.size(); i++) portParam->pidFilters.add(pidFilter[i].toString().getHexValue32());
+			for (int i = 0; i < pidFilter.size(); i++) pidFilters.add(pidFilter[i].toString().getHexValue32());
 		}
 		else if (pidFilter.toString().isNotEmpty())
 		{
-			portParam->pidFilters.add(pidFilter.toString().getHexValue32());
+			pidFilters.add(pidFilter.toString().getHexValue32());
 		}
 	}
+
+	portParam->setVIDPIDFilters(vidFilters, pidFilters);
 
 	StreamingModule::setupModuleFromJSONData(data);
 }

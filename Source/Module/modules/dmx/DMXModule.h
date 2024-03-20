@@ -30,14 +30,13 @@ public:
 	SpinLock deviceLock;
 	std::unique_ptr<DMXDevice> dmxDevice;
 
-	BoolParameter* dmxConnected;
-
 	Array<DMXValueParameter*> channelValues;
 
 
 	//Script
 	const Identifier dmxEventId = "dmxEvent";
 	const Identifier sendDMXId = "send";
+	const Identifier sendDMXUniverseId = "sendUniverse";
 
 	std::unique_ptr<ControllableContainer> thruManager;
 
@@ -45,8 +44,10 @@ public:
 	DMXUniverseManager outputUniverseManager;
 
 
-	void itemAdded(DMXUniverse* i) override;
-	void itemRemoved(DMXUniverse* i) override;
+	void itemAdded(DMXUniverseItem* i) override;
+	void itemsAdded(Array<DMXUniverseItem*> items) override;
+	void itemRemoved(DMXUniverseItem* i) override;
+	void itemsRemoved(Array<DMXUniverseItem*> items) override;
 
 
 	void setCurrentDMXDevice(DMXDevice* d);
@@ -61,6 +62,7 @@ public:
 
 	//Script
 	static var sendDMXFromScript(const var::NativeFunctionArgs& args);
+	static var sendDMXUniverseFromScript(const var::NativeFunctionArgs& args);
 
 	virtual void clearItem() override;
 
@@ -71,12 +73,11 @@ public:
 	void onContainerParameterChanged(Parameter* p) override;
 	void controllableFeedbackUpdate(ControllableContainer* cc, Controllable* c) override;
 
-	void dmxDeviceConnected() override;
-	void dmxDeviceDisconnected() override;
+	void dmxDeviceSetupChanged(DMXDevice*) override;
 
-	void dmxDataInChanged(int net, int subnet, int universe, Array<uint8> values, const String& sourceName = "") override;
+	void dmxDataInChanged(DMXDevice*, int net, int subnet, int universe,int priority, Array<uint8> values, const String& sourceName = "") override;
 
-	DMXUniverse* getUniverse(bool isInput, int net, int subnet, int universe, bool createIfNotThere = true);
+	DMXUniverse* getUniverse(bool isInput, int net, int subnet, int universe, int priority, bool createIfNotThere = true);
 
 	void run() override;
 
@@ -86,16 +87,19 @@ public:
 		public RouteParams
 	{
 	public:
-		DMXRouteParams(Module* sourceModule, Controllable* c);
+		DMXRouteParams(Module* sourceModule, Controllable* c, DMXUniverseManager& outputUniverseManager);
 		~DMXRouteParams() {}
 
 		EnumParameter* mode16bit;
 		BoolParameter* fullRange;
 		IntParameter* channel;
+        TargetParameter* dmxUniverse;
 
 	};
 
-	virtual RouteParams* createRouteParamsForSourceValue(Module* sourceModule, Controllable* c, int /*index*/) override { return new DMXRouteParams(sourceModule, c); }
+	virtual RouteParams* createRouteParamsForSourceValue(Module* sourceModule, Controllable* c, int /*index*/) override {
+        return new DMXRouteParams(sourceModule, c, outputUniverseManager);
+    }
 	virtual void handleRoutedModuleValue(Controllable* c, RouteParams* p) override;
 
 
@@ -106,6 +110,7 @@ public:
 		DMXModuleRouterController(ModuleRouter* router);
 
 		Trigger* autoSetChannels;
+        Trigger* autoSetUniverse;
 
 		void triggerTriggered(Trigger* t) override;
 	};

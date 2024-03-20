@@ -8,6 +8,9 @@
 
 namespace BinaryData
 {
+    extern const char*   process_png;
+    const int            process_pngSize = 717;
+
     extern const char*   keyframe_off_png;
     const int            keyframe_off_pngSize = 2210;
 
@@ -164,6 +167,9 @@ namespace BinaryData
     extern const char*   oscScriptTemplate_js;
     const int            oscScriptTemplate_jsSize = 775;
 
+    extern const char*   pjlinkScriptTemplate_js;
+    const int            pjlinkScriptTemplate_jsSize = 371;
+
     extern const char*   streamingScriptTemplate_js;
     const int            streamingScriptTemplate_jsSize = 1051;
 
@@ -230,11 +236,8 @@ namespace BinaryData
     extern const char*   tray_icon_png;
     const int            tray_icon_pngSize = 3363;
 
-    extern const char*   custom_cext;
-    const int            custom_cextSize = 1111;
-
     // Number of elements in the namedResourceList and originalFileNames arrays.
-    const int namedResourceListSize = 75;
+    const int namedResourceListSize = 76;
 
     // Points to the start of a list of resource names.
     extern const char* namedResourceList[];

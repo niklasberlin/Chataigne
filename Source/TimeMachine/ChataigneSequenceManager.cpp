@@ -1,3 +1,6 @@
+#include "JuceHeader.h"
+#include "TimeMachineIncludes.h"
+#include "ChataigneSequenceManager.h"
 /*
   ==============================================================================
 
@@ -30,6 +33,26 @@ ChataigneSequenceManager::~ChataigneSequenceManager()
 Sequence* ChataigneSequenceManager::createItem()
 {
 	return new ChataigneSequence();
+}
+
+void ChataigneSequenceManager::createSequenceFromAudioFile(File f)
+{
+	if (ModuleManager::getInstance()->getItemsWithType<AudioModule>().size() == 0) {
+		AudioModule* m = new AudioModule();
+		ModuleManager::getInstance()->addItem(m);
+	}
+
+	ChataigneSequence* seq = new ChataigneSequence();
+	addItem(seq);
+	seq->setNiceName(f.getFileNameWithoutExtension());
+
+	ChataigneAudioLayer* l = new ChataigneAudioLayer(seq, var());
+	seq->layerManager->addItem(l);
+	l->uiHeight->setValue(80);
+
+	AudioLayerClip* clip = new AudioLayerClip();
+	l->clipManager.addItem(clip);
+	clip->filePath->setValue(f.getFullPathName());
 }
 
 void ChataigneSequenceManager::showMenuAndGetSequenceStatic(ControllableContainer* startFromCC, std::function<void(Sequence*)> returnFunc)

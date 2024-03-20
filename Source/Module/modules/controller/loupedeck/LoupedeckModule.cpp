@@ -11,6 +11,8 @@
 #pragma warning(push)
 #pragma warning(disable:4838)
 
+#include "Module/ModuleIncludes.h"
+
 LoupedeckModule::LoupedeckModule() :
 	SerialModule(getDefaultTypeString()),
 	buttonParamsCC("Buttons"),
@@ -24,11 +26,13 @@ LoupedeckModule::LoupedeckModule() :
 {
 	//baudRate->setValue(9600);
 
-	portParam->vidFilters.add(0x2ec2);
+	portParam->setVIDPIDFilters({ 0x2ec2 }, {});
+
+	streamingType->setValueWithData(RAW);
+	streamingType->hideInEditor = true;
 
 	autoAdd->hideInEditor = true;
 	autoAdd->setValue(false);
-	streamingType->setValueWithData(RAW);
 
 	messageStructure->hideInEditor = true;
 	firstValueIsTheName->hideInEditor = true;
@@ -132,14 +136,7 @@ LoupedeckModule::LoupedeckModule() :
 	touchPosition->setBounds(0, 0, 1, 1);
 	touchPosition->setControllableFeedbackOnly(true);
 
-	streamingType->setValueWithData(RAW);
-	streamingType->hideInEditor = true;
 
-	autoAdd->hideInEditor = true;
-	autoAdd->setValue(false);
-
-	messageStructure->hideInEditor = true;
-	firstValueIsTheName->hideInEditor = true;
 
 	//serverPath->hideInEditor = true;
 	//serverPath->setValue(getLoupedeckServerPath());
@@ -196,18 +193,18 @@ void LoupedeckModule::setupPortInternal()
 void LoupedeckModule::portOpenedInternal()
 {
 	//Timer::callAfterDelay(100, [this]() {
-		wsMode = WSMode::HANDSHAKE;
+	wsMode = WSMode::HANDSHAKE;
 
-		//in case loupedeck was already in websocket mode
-		Array<uint8_t> closeBytes{ 0x88, 0x80, 0x00, 0x00, 0x00, 0x00 };
-		sendBytes(closeBytes);
+	//in case loupedeck was already in websocket mode
+	Array<uint8_t> closeBytes{ 0x88, 0x80, 0x00, 0x00, 0x00, 0x00 };
+	sendBytes(closeBytes);
 
-		String req = "GET /index.html HTTP/1.1\n\
+	String req = "GET /index.html HTTP/1.1\n\
 Connection: Upgrade\n\
 Upgrade: websocket\n\
 Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\n\n";
 
-		this->sendMessage(req);
+	this->sendMessage(req);
 	//});
 }
 
@@ -311,7 +308,7 @@ void LoupedeckModule::processTouchData(Array<uint8_t> data)
 
 		touchPadMap.set(touchID, pad);
 		posOnTouchMap.set(touchID, curPos);
-		if(pad >= 0) padsTouchPositions[pad]->setPoint(0, 0);
+		if (pad >= 0) padsTouchPositions[pad]->setPoint(0, 0);
 	}
 
 

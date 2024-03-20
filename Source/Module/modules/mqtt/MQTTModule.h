@@ -14,19 +14,38 @@
 #include <mosquittopp.h>
 #endif
 
+
+class MQTTTopic :
+	public BaseItem
+{
+public:
+	enum Protocol { RAW, JSON, DEFAULT };
+
+	MQTTTopic(var params = var());
+	virtual ~MQTTTopic();
+
+	StringParameter* topic;
+	EnumParameter* protocol;
+	int mid;
+
+	//InspectableEditor* getEditorInternal(bool isRoot, Array<Inspectable*> inspectables = Array<Inspectable*>()) override;
+
+	DECLARE_TYPE("Topic");
+};
+
 class MQTTClientModule :
 	public Module
 #if JUCE_WINDOWS
 	, public mosqpp::mosquittopp
 #endif
 	, public Thread
+	, public BaseManager<MQTTTopic>::ManagerListener
 {
 public:
 	MQTTClientModule(const String& name = "MQTT Client", bool canHaveInput = true, bool canHaveOutput = true);
 	virtual ~MQTTClientModule();
 
-	
-	enum Protocol { RAW, JSON };
+
 	EnumParameter* protocol;
 
 	StringParameter* host;
@@ -42,8 +61,12 @@ public:
 	StringParameter* username;
 	StringParameter* pass;
 	//BoolParameter* useTLS;
-	Array<int> topicMap;
-	ControllableContainer topicsCC;
+	HashMap<String, MQTTTopic*> topicItemMap;
+
+	SpinLock updateTopicLock;
+	BaseManager<MQTTTopic> topicsManager;
+
+	
 
 	const Identifier dataEventId = "dataEvent";
 
@@ -51,17 +74,21 @@ public:
 
 	void onContainerParameterChangedInternal(Parameter* p) override;
 	void onControllableFeedbackUpdateInternal(ControllableContainer* cc, Controllable* c) override;
-	void childStructureChanged(ControllableContainer* cc) override;
-
-	void topicsCreateCallback(ControllableContainer* cc);
 
 	void publishMessage(const String& topic, const String& message);
 
-	void updateTopicSubs(bool keepData = true);
+	void itemAdded(MQTTTopic* item) override;
+	void itemsAdded(Array<MQTTTopic*> item) override;
+	void itemRemoved(MQTTTopic* item) override;
+	void itemsRemoved(Array<MQTTTopic*> item) override;
+
+	void updateTopicSubs();
 
 	void afterLoadJSONDataInternal() override;
 
 	void run() override;
+
+	void stopClient();
 
 	//mosquitto
 #if JUCE_WINDOWS

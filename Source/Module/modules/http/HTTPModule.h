@@ -21,6 +21,7 @@ public:
 	enum ResultDataType { RAW, JSON, XML, DEFAULT };
 	
 	StringParameter * baseAddress;
+  IntParameter* timeout;
 	BoolParameter* autoAdd;
 	EnumParameter* protocol;
 
@@ -54,6 +55,12 @@ public:
 		Request(URL u, RequestMethod m, ResultDataType dataType = ResultDataType::DEFAULT, String extraHeaders = String(), File file = File()) : 
 			url(u), method(m), resultDataType(dataType), extraHeaders(extraHeaders)
 		{
+		}
+
+		Request(Request& e) :
+			url(e.url), method(e.method), resultDataType(e.resultDataType), extraHeaders(e.extraHeaders)
+		{
+
 		}
 
 		URL url;

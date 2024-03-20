@@ -32,7 +32,6 @@ public:
 	std::unique_ptr<OSCReceiver> receiver;
 	std::unique_ptr<DatagramSocket> socket;
 
-
 	void setForceDisabled(bool value);
 
 	virtual void setupSender();
@@ -87,6 +86,7 @@ public:
 	virtual void setupModuleFromJSONData(var data) override;
 
 	void itemAdded(OSCOutput* output) override;
+	void itemsAdded(Array<OSCOutput*> outputs) override;
 
 	//SEND
 	virtual void setupSenders();

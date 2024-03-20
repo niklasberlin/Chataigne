@@ -30,7 +30,7 @@ For more information, please refer to <http://unlicense.org/>
 /* include ------------------------------------------------------- */
 
 #pragma warning(disable:4206)
-#ifdef __arm__
+#if USE_GPIO
 
 #define _GNU_SOURCE
 

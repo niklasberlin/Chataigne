@@ -8,6 +8,7 @@
   ==============================================================================
 */
 
+#include "Module/ModuleIncludes.h"
 #include "Common/Command/CommandIncludes.h"
 
 Module::Module(const String& name) :
@@ -306,6 +307,7 @@ void Module::createControllablesForContainer(var data, ControllableContainer* cc
 				int index = p.value.getProperty("index", -1);
 				childCC = new ControllableContainer(p.name.toString());
 				cc->addChildControllableContainer(childCC, false, index);
+				childCC->saveAndLoadRecursiveData = true;
 				customModuleContainers.add(childCC);
 			}
 

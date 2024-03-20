@@ -25,24 +25,31 @@ public:
 	enum OSType { OS_WIN, OS_MAC, OS_LINUX };
 
 	Trigger* listIPs;
-	IntParameter* pingFrequency; // in seconds
+	IntParameter* pingInterval; // in seconds
+	FloatParameter* pingTimeout;
 
-	EnumParameter* osType;
-	StringParameter* osName;
-	StringParameter* ips;
-	StringParameter* mac;
 	Trigger* terminateTrigger;
 	Trigger* crashedTrigger;
 
+	ControllableContainer osInfoCC;
+	EnumParameter* osType;
+	StringParameter* osName;
+	FloatParameter* osCPUUsage;
+	FloatParameter* osMemoryUsage;
+	FloatParameter* osUpTime;
+	FloatParameter* processUpTime;
+
+	ControllableContainer networkInfoCC;
+	StringParameter* ips;
+	StringParameter* mac;
+
 	ControllableContainer appControlNamesCC;
 	ControllableContainer appControlStatusCC;
+
 	ControllableContainer pingIPsCC;
 	ControllableContainer pingStatusCC;
 
-	//Ping
-	OwnedArray<ChildProcess> pingProcesses;
-
-	var statusAndIpGhostData;
+	static float timeAtProcessStart;
 
 	//Script
 	const Identifier launchAppId = "launchApp";
@@ -53,6 +60,20 @@ public:
 
 	//child process
 	Array<String, CriticalSection> commandsToRun;
+
+	class OSThread :
+		public Thread
+	{
+	public:
+		OSThread(OSModule* m) : Thread("OS"), osModule(m), moduleRef(m) {}
+		~OSThread() {}
+
+		OSModule* osModule;
+		WeakReference<Inspectable> moduleRef;
+		void run();
+	};
+
+	OSThread osThread;
 
 	class PingThread :
 		public Thread
@@ -65,6 +86,7 @@ public:
 		WeakReference<Inspectable> moduleRef;
 
 		void run() override;
+		bool icmpPing(const String& host);
 	};
 
 	PingThread pingThread;
@@ -84,6 +106,8 @@ public:
 	void appControlCreateControllable(ControllableContainer* c);
 	void pingIPsCreateControllable(ControllableContainer* c);
 
+	void childStructureChanged(ControllableContainer* c) override;
+	void onContainerParameterChangedInternal(Parameter* p) override;
 	void onControllableFeedbackUpdateInternal(ControllableContainer* cc, Controllable* c) override;
 
 	static var launchFileFromScript(const var::NativeFunctionArgs& args);

@@ -43,7 +43,7 @@
 
 #define JUCE_USE_DARK_SPLASH_SCREEN 1
 
-#define JUCE_PROJUCER_VERSION 0x70003
+#define JUCE_PROJUCER_VERSION 0x70008
 
 //==============================================================================
 #define JUCE_MODULE_AVAILABLE_juce_audio_basics          1
@@ -54,6 +54,7 @@
 #define JUCE_MODULE_AVAILABLE_juce_core                  1
 #define JUCE_MODULE_AVAILABLE_juce_cryptography          1
 #define JUCE_MODULE_AVAILABLE_juce_data_structures       1
+#define JUCE_MODULE_AVAILABLE_juce_dmx                   1
 #define JUCE_MODULE_AVAILABLE_juce_dsp                   1
 #define JUCE_MODULE_AVAILABLE_juce_events                1
 #define JUCE_MODULE_AVAILABLE_juce_graphics              1
@@ -62,6 +63,7 @@
 #define JUCE_MODULE_AVAILABLE_juce_opengl                1
 #define JUCE_MODULE_AVAILABLE_juce_organicui             1
 #define JUCE_MODULE_AVAILABLE_juce_osc                   1
+#define JUCE_MODULE_AVAILABLE_juce_serial                1
 #define JUCE_MODULE_AVAILABLE_juce_sharedtexture         1
 #define JUCE_MODULE_AVAILABLE_juce_simpleweb             1
 #define JUCE_MODULE_AVAILABLE_juce_timeline              1
@@ -270,6 +272,10 @@
 
 #ifndef    JUCE_DISABLE_COREGRAPHICS_FONT_SMOOTHING
  //#define JUCE_DISABLE_COREGRAPHICS_FONT_SMOOTHING 0
+#endif
+
+#ifndef    JUCE_FLOAT_COLOURS
+ #define   JUCE_FLOAT_COLOURS 1
 #endif
 
 //==============================================================================

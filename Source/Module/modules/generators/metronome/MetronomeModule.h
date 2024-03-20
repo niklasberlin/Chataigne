@@ -27,9 +27,12 @@ public:
 	FloatParameter * onTime;
 	FloatParameter * random;
 	Trigger * tapTempo;
+	Trigger* resetTime;
+
 	double TSTapTempoLastPressed = 0;
 	Random rnd;
-
+	Array<double> tapTempoHistory;
+	IntParameter* tapTempoIntervalsMax;
 	void updateFreqParam();
 	
 	void onContainerParameterChangedInternal(Parameter* p) override;

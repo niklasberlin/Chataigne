@@ -121,6 +121,7 @@ public:
 	EnumParameter* ltcFPS;
 	int curLTCFPS; //avoid accessing enum in audio thread
 	IntParameter* ltcChannel;
+	BoolParameter* ltcUseDate;
 
 	ControllableContainer ltcCC;
 	BoolParameter* ltcPlaying;
@@ -131,6 +132,8 @@ public:
 
 	std::unique_ptr<PitchDetector> pitchDetector;
 	std::unique_ptr<LTCDecoder> ltcDecoder;
+
+	void initSetup();
 
 	virtual void updateAudioSetup();
 	void updateSelectedMonitorChannels();
@@ -158,7 +161,9 @@ public:
 
 
 	void itemAdded(FFTAnalyzer* item) override;
+	void itemsAdded(Array<FFTAnalyzer*> items) override;
 	void itemRemoved(FFTAnalyzer* item) override;
+	void itemsRemoved(Array<FFTAnalyzer*> items) override;
 
 
 	static AudioModule* create() { return new AudioModule(); }

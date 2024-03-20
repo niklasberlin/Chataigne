@@ -14,7 +14,8 @@ ConsequenceManager::ConsequenceManager(const String& name, Multiplex* multiplex)
 	BaseManager<BaseItem>(name),
 	MultiplexTarget(multiplex),
 	killDelaysOnTrigger(nullptr),
-	forceDisabled(false)
+	forceDisabled(false),
+	csmNotifier(5)
 {
 	canBeDisabled = false;
 	canBeCopiedAndPasted = true;
@@ -25,6 +26,9 @@ ConsequenceManager::ConsequenceManager(const String& name, Multiplex* multiplex)
 	factory.defs.add(MultiplexTargetDefinition<BaseItem>::createDef<ConsequenceGroup>("", "Group", multiplex));
 
 	managerFactory = &factory;
+
+	triggerPreview = addTrigger("Trigger", "Trigger all the consequences. Triggers at the previewed index if multiplexed");
+	triggerPreview->hideInEditor = true;
 
 	delay = addFloatParameter("Delay", "Delay the triggering of the commands", 0, 0);
 	delay->defaultUI = FloatParameter::TIME;
@@ -42,6 +46,8 @@ ConsequenceManager::~ConsequenceManager()
 {
 
 }
+
+
 
 
 void ConsequenceManager::triggerAll(int multiplexIndex)
@@ -67,6 +73,7 @@ void ConsequenceManager::triggerAll(int multiplexIndex)
 
 void ConsequenceManager::cancelDelayedConsequences()
 {
+	for (auto& launcher : staggerLaunchers) launcher->stopThread(100);
 	staggerLaunchers.clear();
 }
 
@@ -81,10 +88,31 @@ void ConsequenceManager::setForceDisabled(bool value, bool force)
 	}
 }
 
+void ConsequenceManager::updateKillDelayTrigger()
+{
+	bool showKill = items.size() > 1 && (delay->floatValue() > 0 || stagger->floatValue() > 0);
+	if (showKill)
+	{
+		if (killDelaysOnTrigger == nullptr) killDelaysOnTrigger = addBoolParameter("Cancel delays on Trigger", "If checked, this will ensure that when triggering, all previous delayed consequences are cancelled", false);
+	}
+	else
+	{
+		if (killDelaysOnTrigger != nullptr)
+		{
+			removeControllable(killDelaysOnTrigger);
+			killDelaysOnTrigger = nullptr;
+		}
+	}
+
+}
+
 void ConsequenceManager::onContainerTriggerTriggered(Trigger* t)
 {
 	if (forceDisabled) return;
+
 	//for manual trigger eventually
+	if (t == triggerPreview) triggerAll(getPreviewIndex());
+
 	BaseManager::onContainerTriggerTriggered(t);
 }
 
@@ -93,19 +121,7 @@ void ConsequenceManager::onContainerParameterChanged(Parameter* p)
 	BaseManager::onContainerParameterChanged(p);
 	if (p == delay || p == stagger)
 	{
-		bool showKill = delay->floatValue() > 0 || stagger->floatValue() > 0;
-		if (showKill)
-		{
-			if (killDelaysOnTrigger == nullptr) killDelaysOnTrigger = addBoolParameter("Cancel delays on Trigger", "If checked, this will ensure that when triggering, all previous delayed consequences are cancelled", false);
-		}
-		else
-		{
-			if (killDelaysOnTrigger)
-			{
-				removeControllable(killDelaysOnTrigger);
-				killDelaysOnTrigger = nullptr;
-			}
-		}
+		updateKillDelayTrigger();
 	}
 }
 
@@ -117,6 +133,23 @@ void ConsequenceManager::addItemInternal(BaseItem* bi, var data)
 	//triggerAll->hideInEditor = items.size() == 0;
 	delay->hideInEditor = items.size() == 0;
 	stagger->hideInEditor = items.size() < 2;
+	if (!isClearing) csmNotifier.addMessage(new ConsequenceManagerEvent(ConsequenceManagerEvent::STAGGER_CHANGED, this));
+	updateKillDelayTrigger();
+}
+
+void ConsequenceManager::addItemsInternal(Array<BaseItem*> items, var data)
+{
+	for (auto& bi : items)
+	{
+		if (Consequence* c = dynamic_cast<Consequence*>(bi)) c->forceDisabled = forceDisabled;
+		else if (ConsequenceGroup* g = dynamic_cast<ConsequenceGroup*>(bi)) g->csm.setForceDisabled(forceDisabled);
+	}
+
+	//triggerAll->hideInEditor = items.size() == 0;
+	delay->hideInEditor = items.size() == 0;
+	stagger->hideInEditor = items.size() < 2;
+	if (!isClearing) csmNotifier.addMessage(new ConsequenceManagerEvent(ConsequenceManagerEvent::STAGGER_CHANGED, this));
+	updateKillDelayTrigger();
 }
 
 void ConsequenceManager::removeItemInternal(BaseItem*)
@@ -124,19 +157,30 @@ void ConsequenceManager::removeItemInternal(BaseItem*)
 	//triggerAll->hideInEditor = items.size() == 0;
 	delay->hideInEditor = items.size() == 0;
 	stagger->hideInEditor = items.size() < 2;
+	if (!isClearing) csmNotifier.addMessage(new ConsequenceManagerEvent(ConsequenceManagerEvent::STAGGER_CHANGED, this));
+	updateKillDelayTrigger();
+}
+
+void ConsequenceManager::removeItemsInternal(Array<BaseItem*>)
+{
+	delay->hideInEditor = items.size() == 0;
+	stagger->hideInEditor = items.size() < 2;
+	if (!isClearing) csmNotifier.addMessage(new ConsequenceManagerEvent(ConsequenceManagerEvent::STAGGER_CHANGED, this));
+	updateKillDelayTrigger();
 }
 
 void ConsequenceManager::launcherTriggered(StaggerLauncher* launcher)
 {
 	if (staggerLaunchers.size() == 0 || items.size() == 0) return;
 	if (launcher != staggerLaunchers.getLast()) return;
-	staggerProgression->setValue((launcher->triggerIndex + 1)*1.0f / items.size());
+	staggerProgression->setValue((launcher->triggerIndex + 1) * 1.0f / items.size());
 }
 
 void ConsequenceManager::launcherFinished(StaggerLauncher* launcher)
 {
 	MessageManager::getInstance()->callAsync([=]()
 		{
+			launcher->stopThread(100);
 			staggerLaunchers.removeObject(launcher);
 		}
 	);
@@ -157,7 +201,13 @@ ConsequenceManager::StaggerLauncher::StaggerLauncher(ConsequenceManager* csm, in
 
 ConsequenceManager::StaggerLauncher::~StaggerLauncher()
 {
-	stopThread(100);
+	if (Engine::mainEngine->isClearing) stopThread(1000);
+	else if (isThreadRunning())
+	{
+		MessageManager::callAsync([this] {
+			stopThread(100);
+			});
+	}
 }
 
 void ConsequenceManager::StaggerLauncher::run()
@@ -170,7 +220,14 @@ void ConsequenceManager::StaggerLauncher::run()
 
 	uint32 curTime = timeAtRun;
 
-	while (triggerIndex < csm->items.size())
+	Array<BaseItem*> consequencesToLaunch;
+	for (auto& bi : csm->items)
+	{
+		if (!bi->enabled->boolValue()) continue;
+		consequencesToLaunch.add(bi);
+	}
+
+	while (!threadShouldExit() && triggerIndex < consequencesToLaunch.size())
 	{
 		uint32 nextTriggerTime = timeAtRun + d + s * triggerIndex;
 		while (nextTriggerTime > curTime)
@@ -181,17 +238,19 @@ void ConsequenceManager::StaggerLauncher::run()
 			nextTriggerTime = timeAtRun + d + s * triggerIndex;
 		}
 
-		if (triggerIndex >= csm->items.size()) break;
-		BaseItem* bi = csm->items[triggerIndex];
+		if (triggerIndex >= consequencesToLaunch.size()) break;
+		BaseItem* bi = consequencesToLaunch[triggerIndex];
 
 		while (bi != nullptr && !bi->enabled->boolValue())
 		{
 			triggerIndex++;
-			if (triggerIndex >= csm->items.size()) break;
+			if (triggerIndex >= consequencesToLaunch.size()) break;
 			bi = csm->items[triggerIndex];
 		}
 
-		if (bi == nullptr) break;;
+
+		if (threadShouldExit() || bi == nullptr) break;
+
 		if (Consequence* c = dynamic_cast<Consequence*>(bi)) c->triggerCommand(multiplexIndex);
 		else if (ConsequenceGroup* g = dynamic_cast<ConsequenceGroup*>(bi)) if (g->enabled->boolValue()) g->csm.triggerAll(multiplexIndex);
 
@@ -199,5 +258,10 @@ void ConsequenceManager::StaggerLauncher::run()
 		triggerIndex++;
 	}
 
-	csm->launcherFinished(this);
+	if (!threadShouldExit()) csm->launcherFinished(this);
+}
+
+void ConsequenceManager::multiplexPreviewIndexChanged()
+{
+	csmNotifier.addMessage(new ConsequenceManagerEvent(ConsequenceManagerEvent::MULTIPLEX_PREVIEW_CHANGED, this));
 }

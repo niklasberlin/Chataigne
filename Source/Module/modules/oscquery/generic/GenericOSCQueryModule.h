@@ -10,18 +10,7 @@
 
 #pragma once
 
-class GenericOSCQueryValueContainer :
-	public ControllableContainer
-{
-public:
-	GenericOSCQueryValueContainer(const String& name);
-	~GenericOSCQueryValueContainer();
 
-	BoolParameter* enableListen;
-	BoolParameter* syncContent;
-
-	InspectableEditor* getEditorInternal(bool isRoot, Array<Inspectable*> inspectables = Array<Inspectable*>()) override;
-};
 
 class GenericOSCQueryModule;
 class OSCQueryOutput :
@@ -40,7 +29,8 @@ class GenericOSCQueryModule :
 	public IOSCSenderModule,
 	public SimpleWebSocketClientBase::Listener,
 	public Thread,
-	public Timer
+	public Timer,
+	public EngineListener
 {
 public:
 	GenericOSCQueryModule(const String& name = "OSCQuery", int defaultRemotePort = 5678);
@@ -63,6 +53,7 @@ public:
 	StringParameter* remoteHost;
 	IntParameter* remotePort;
 	IntParameter* remoteOSCPort;
+	IntParameter* remoteWSPort;
 
 	OSCSender sender;
 	std::unique_ptr<SimpleWebSocketClientBase> wsClient;
@@ -85,11 +76,9 @@ public:
 
 	virtual void syncData();
 	virtual void updateTreeFromData(var data);
-	virtual void updateContainerFromData(ControllableContainer* cc, var data);
-	virtual void createOrUpdateControllableFromData(ControllableContainer* parentCC, Controllable* c, StringRef name, var data);
 
 	void updateAllListens();
-	void updateListenToContainer(GenericOSCQueryValueContainer* gcc);
+	void updateListenToContainer(OSCQueryHelpers::OSCQueryValueContainer* gcc, bool onlySendIfListen = false);
 
 	virtual void onControllableFeedbackUpdateInternal(ControllableContainer* cc, Controllable* c) override;
 
@@ -98,13 +87,16 @@ public:
 	void connectionError(const String& errorMessage) override;
 
 	void dataReceived(const MemoryBlock& data) override;
+	void processOSCMessage(const OSCMessage& m);
 	void messageReceived(const String& message) override;
 
 	var getJSONData() override;
 	void loadJSONDataInternal(var data) override;
 	void afterLoadJSONDataInternal() override;
 
-	void timerCallback();
+	void endLoadFile() override;
+
+	void timerCallback() override;
 
 	// Inherited via Thread
 	virtual void run() override;

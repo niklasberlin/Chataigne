@@ -14,7 +14,8 @@ ChataigneAudioLayer::ChataigneAudioLayer(ChataigneSequence* _sequence, var param
 	AudioLayer(_sequence, params),
 	audioModule(nullptr),
 	chataigneSequence(_sequence),
-	timeAtStartRecord(0)
+	timeAtStartRecord(0),
+	arm(nullptr)
 {
 	ModuleManager::getInstance()->addBaseManagerListener(this);
 
@@ -52,6 +53,7 @@ void ChataigneAudioLayer::setAudioModule(AudioModule* newModule)
 	{
 		setAudioProcessorGraph(&audioModule->graph, AUDIO_OUTPUTMIXER_GRAPH_ID);
 		audioModule->addAudioModuleListener(this);
+
 	}
 	else
 	{
@@ -61,6 +63,41 @@ void ChataigneAudioLayer::setAudioModule(AudioModule* newModule)
 	updateSelectedOutChannels();
 
 	audioLayerListeners.call(&ChataigneAudioLayerListener::targetAudioModuleChanged, this);
+}
+
+void ChataigneAudioLayer::updateSelectedOutChannels()
+{
+	AudioLayer::updateSelectedOutChannels();
+	updateInputConnections();
+}
+
+void ChataigneAudioLayer::updateInputConnections(bool updatePlayConfig)
+{
+	if (audioModule != nullptr)
+	{
+		for (auto& c : inputConnections) audioModule->graph.removeConnection(c);
+		inputConnections.clear();
+
+
+		if (arm != nullptr && arm->boolValue())
+		{
+			int numInputChannels = audioModule->graph.getTotalNumInputChannels();
+			for (int i = 0; i < numInputChannels; i++)
+			{
+				AudioProcessorGraph::Connection c = { {AUDIO_INPUTMIXER_GRAPH_ID, i}, { graphID, i } };
+				inputConnections.add(c);
+				audioModule->graph.addConnection(c);
+			}
+		}
+
+		numActiveInputs = inputConnections.size();
+	}
+	else
+	{
+		numActiveInputs = 0;
+	}
+
+	if (updatePlayConfig) updatePlayConfigDetails();
 }
 
 AudioLayerProcessor* ChataigneAudioLayer::createAudioLayerProcessor()
@@ -74,11 +111,37 @@ void ChataigneAudioLayer::itemAdded(Module* m)
 	if (audioModule == nullptr && am != nullptr) setAudioModule(am);
 }
 
+void ChataigneAudioLayer::itemsAdded(Array<Module*> modules)
+{
+	if (audioModule != nullptr) return;
+	for (auto& m : modules)
+	{
+		AudioModule* am = dynamic_cast<AudioModule*>(m);
+		if (am != nullptr)
+		{
+			setAudioModule(am);
+			break;
+		}
+	}
+}
+
 void ChataigneAudioLayer::itemRemoved(Module* m)
 {
 	if (audioModule == m)
 	{
 		setAudioModule(nullptr);
+	}
+}
+
+void ChataigneAudioLayer::itemsRemoved(Array<Module*> modules)
+{
+	for (auto& m : modules)
+	{
+		if (audioModule == m)
+		{
+			setAudioModule(nullptr);
+			break;
+		}
 	}
 }
 
@@ -148,6 +211,13 @@ void ChataigneAudioLayer::exportRMS(bool toNewMappingLayer, bool toClipboard, bo
 	}
 }
 
+void ChataigneAudioLayer::onContainerParameterChanged(Parameter* p)
+{
+	AudioLayer::onContainerParameterChanged(p);
+
+	if (p == arm) updateInputConnections();
+}
+
 void ChataigneAudioLayer::sequenceCurrentTimeChanged(Sequence* s, float prevTime, bool evaluateSkippedData)
 {
 	AudioLayer::sequenceCurrentTimeChanged(s, prevTime, evaluateSkippedData);
@@ -178,6 +248,11 @@ void ChataigneAudioLayer::sequencePlayStateChanged(Sequence* s)
 
 		if (autoDisarm->boolValue()) arm->setValue(false);
 	}
+}
+
+void ChataigneAudioLayer::audioSetupChanged()
+{
+	updateSelectedOutChannels();
 }
 
 var ChataigneAudioLayer::getJSONData()

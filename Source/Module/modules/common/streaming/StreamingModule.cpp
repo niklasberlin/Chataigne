@@ -30,12 +30,12 @@ StreamingModule::StreamingModule(const String& name) :
 	defManager->add(CommandDefinition::createDef(this, "", "Send custom values", &SendStreamValuesCommand::create, CommandContext::BOTH));
 	defManager->add(CommandDefinition::createDef(this, "", "Send hex data", &SendStreamStringCommand::create, CommandContext::BOTH)->addParam("mode", SendStreamStringCommand::DataMode::HEX));
 
-	scriptObject.setMethod(sendId, StreamingModule::sendStringFromScript);
-	scriptObject.setMethod(sendToId, StreamingModule::sendStringToFromScript);
-	scriptObject.setMethod(sendExcludeId, StreamingModule::sendStringExcludeFromScript);
-	scriptObject.setMethod(sendBytesId, StreamingModule::sendBytesFromScript);
-	scriptObject.setMethod(sendBytesToId, StreamingModule::sendBytesToFromScript);
-	scriptObject.setMethod(sendBytesExcludeId, StreamingModule::sendBytesExcludeFromScript);
+	scriptObject.getDynamicObject()->setMethod(sendId, StreamingModule::sendStringFromScript);
+	scriptObject.getDynamicObject()->setMethod(sendToId, StreamingModule::sendStringToFromScript);
+	scriptObject.getDynamicObject()->setMethod(sendExcludeId, StreamingModule::sendStringExcludeFromScript);
+	scriptObject.getDynamicObject()->setMethod(sendBytesId, StreamingModule::sendBytesFromScript);
+	scriptObject.getDynamicObject()->setMethod(sendBytesToId, StreamingModule::sendBytesToFromScript);
+	scriptObject.getDynamicObject()->setMethod(sendBytesExcludeId, StreamingModule::sendBytesExcludeFromScript);
 
 	scriptManager->scriptTemplate += ChataigneAssetManager::getInstance()->getScriptTemplate("streaming");
 
@@ -541,7 +541,7 @@ void StreamingModule::showMenuAndCreateValue(ControllableContainer* container)
 
 void StreamingModule::createThruControllable(ControllableContainer* cc)
 {
-	TargetParameter* p = new TargetParameter("Output module", "Target module to send the raw data to", "");
+	TargetParameter* p = new TargetParameter(cc->getUniqueNameInContainer("Output module 1"), "Target module to send the raw data to", "");
 	p->targetType = TargetParameter::CONTAINER;
 	p->customGetTargetContainerFunc = &ModuleManager::showAndGetModuleOfType<StreamingModule>;
 	p->isRemovableByUser = true;

@@ -52,7 +52,7 @@ void WebSocketServerModule::setupServer()
 #if JUCE_MAC
         File k = File::getSpecialLocation(File::currentApplicationFile).getChildFile("Contents/Resources/server.key");
         File c = File::getSpecialLocation(File::currentApplicationFile).getChildFile("Contents/Resources/server.crt");
-#elif defined __arm__
+#elif JUCE_LINUX && (defined(__arm__) || defined(__aarch64__))
 		File k = File::getSpecialLocation(File::currentApplicationFile).getParentDirectory().getChildFile("usr/bin/server.key");
 		File c = File::getSpecialLocation(File::currentApplicationFile).getParentDirectory().getChildFile("usr/bin/server.crt");
 #else	
@@ -105,6 +105,10 @@ void WebSocketServerModule::sendMessageInternal(const String& message, var param
 			for (int i = 0; i < list.size(); i++) excludes.add(list[i].toString());
 			server->sendExclude(message, excludes);
 		}
+		else
+		{
+			server->send(message);
+		}
 	}
 	else
 	{
@@ -128,6 +132,10 @@ void WebSocketServerModule::sendBytesInternal(Array<uint8> data, var params)
 			StringArray excludes;
 			for (int i = 0; i < list.size(); i++) excludes.add(list[i].toString());
 			server->sendExclude(b, excludes);
+		}
+		else
+		{
+			server->send((const char*)data.getRawDataPointer(), data.size());
 		}
 	}
 	else

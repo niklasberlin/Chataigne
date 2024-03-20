@@ -1,20 +1,23 @@
 /*
   ==============================================================================
 
-    MorpherManagerUI.cpp
-    Created: 11 Dec 2017 5:01:24pm
-    Author:  Ben
+	MorpherManagerUI.cpp
+	Created: 11 Dec 2017 5:01:24pm
+	Author:  Ben
 
   ==============================================================================
 */
 
+#include "CustomVariables/CustomVariablesIncludes.h"
+
 MorpherPanel::MorpherPanel(StringRef contentName) :
 	ShapeShifterContentComponent(contentName),
 	currentGroup(nullptr),
-    currentMorpherUI(nullptr)
+	currentMorpherUI(nullptr)
 
 {
 	InspectableSelectionManager::mainSelectionManager->addSelectionListener(this);
+
 
 	CVGroup* group = InspectableSelectionManager::mainSelectionManager->getInspectableAs<CVGroup>();
 	setGroup(group);
@@ -23,24 +26,23 @@ MorpherPanel::MorpherPanel(StringRef contentName) :
 MorpherPanel::~MorpherPanel()
 {
 	setGroup(nullptr);
-	if(InspectableSelectionManager::mainSelectionManager != nullptr) InspectableSelectionManager::mainSelectionManager->removeSelectionListener(this);
+	if (InspectableSelectionManager::mainSelectionManager != nullptr) InspectableSelectionManager::mainSelectionManager->removeSelectionListener(this);
 }
 
 void MorpherPanel::setGroup(CVGroup* g)
 {
 	if (currentGroup == g) return;
-	if (currentGroup != nullptr)
+	if (currentGroup != nullptr && !currentGroup->isClearing)
 	{
 		currentGroup->removeInspectableListener(this);
 		currentGroup->controlMode->removeAsyncParameterListener(this);
 		currentGroup->removeInspectableListener(this);
-
 	}
 
-	if (g != nullptr)
-	{
-		if (g->morpher == nullptr) g = nullptr;
-	}
+	//if (g != nullptr)
+	//{
+	//	if (g->morpher == nullptr) g = nullptr;
+	//}
 
 	currentGroup = g;
 
@@ -84,7 +86,7 @@ void MorpherPanel::paint(Graphics& g)
 	{
 		g.setColour(TEXTNAME_COLOR);
 		g.setFont(20);
-		g.drawFittedText("Select a Custom Variable Group with 2D Voronoi mode\nto edit its morpher here.", getLocalBounds().reduced(20), Justification::centred,3);
+		g.drawFittedText("Select a Custom Variable Group with 2D Voronoi mode\nto edit its morpher here.", getLocalBounds().reduced(20), Justification::centred, 3);
 	}
 }
 
@@ -102,12 +104,12 @@ void MorpherPanel::inspectablesSelectionChanged()
 	{
 		setGroup(group);
 	}
-	
+
 }
 
 void MorpherPanel::inspectableDestroyed(Inspectable* i)
 {
-	if (i == currentGroup || i == currentGroup->morpher.get()) setGroup(nullptr);
+	if (currentGroup != nullptr && (i == currentGroup || i == currentGroup->morpher.get())) setGroup(nullptr);
 	if (currentMorpherUI != nullptr && i == currentMorpherUI->morpher) setMorpher(nullptr);
 }
 
@@ -134,9 +136,9 @@ MorpherViewUI::MorpherViewUI(Morpher* morpher) :
 	centerUIAroundPosition = true;
 	updatePositionOnDragMove = true;
 	useCheckersAsUnits = true;
-	
+
 	setupBGImage();
-	
+
 	manager->addAsyncContainerListener(this);
 	morpher->addAsyncCoalescedContainerListener(this);
 	//manager->addMorpherListener(this);
@@ -158,7 +160,7 @@ MorpherViewUI::MorpherViewUI(Morpher* morpher) :
 
 MorpherViewUI::~MorpherViewUI()
 {
-	if(morpher != nullptr) morpher->removeAsyncContainerListener(this);
+	if (morpher != nullptr) morpher->removeAsyncContainerListener(this);
 	manager->removeAsyncContainerListener(this);
 }
 
@@ -321,7 +323,7 @@ void MorpherViewUI::paintBackground(Graphics& g)
 					{
 						if (i == j) continue;
 
-						if (morpher->checkSitesAreNeighbours(edges[i]->neighbor, edges[j]->neighbor)) continue;
+						//if (morpher->checkSitesAreNeighbours(edges[i]->neighbor, edges[j]->neighbor)) continue;
 
 						float ed = edgeDists[j];
 						if (ed < minOtherEdgeDist)
@@ -433,12 +435,12 @@ void MorpherViewUI::itemDragMove(const SourceDetails& details)
 void MorpherViewUI::itemDropped(const SourceDetails& details)
 {
 	//String type = details.description.getProperty("type", "").toString();
-	
+
 	BaseItemMinimalUI<MorphTarget>* bui = dynamic_cast<BaseItemMinimalUI<MorphTarget>*>(details.sourceComponent.get());
-	
-	if(bui != nullptr && bui == &mainTargetUI)
+
+	if (bui != nullptr && bui == &mainTargetUI)
 	{
-		Point<float> p = getPositionFromDrag(bui, details); 
+		Point<float> p = getPositionFromDrag(bui, details);
 		bui->item->viewUIPosition->setUndoablePoint(bui->item->viewUIPosition->getPoint(), p.toFloat());
 		updateComponentViewPosition(bui, bui->item->viewUIPosition->getPoint(), AffineTransform());
 	}
@@ -470,11 +472,11 @@ void MorpherViewUI::controllableFeedbackUpdateAsync(Controllable* c)
 	{
 		if (!mainTargetUI.isMouseOverOrDragging(true))
 		{
-			updateComponentViewPosition(&mainTargetUI,mainTargetUI.item->viewUIPosition->getPoint().toFloat(), AffineTransform());
+			updateComponentViewPosition(&mainTargetUI, mainTargetUI.item->viewUIPosition->getPoint().toFloat(), AffineTransform());
 			shouldRepaint = true;
 		}
 	}
-	else if (MorphTarget * t = c->getParentAs<MorphTarget>())
+	else if (MorphTarget* t = c->getParentAs<MorphTarget>())
 	{
 		if (c == t->viewUIPosition || c == t->targetColor || c == t->enabled) shouldRepaint = true;
 		//

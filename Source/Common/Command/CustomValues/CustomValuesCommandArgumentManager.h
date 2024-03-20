@@ -29,7 +29,7 @@ public:
 	CustomValuesCommandArgumentManager* linkedTemplateManager;
 	WeakReference<Inspectable> linkedTemplateManagerRef;
 
-	std::function<void(Parameter*, var)> createParamCallbackFunc;
+	std::function<void(Parameter*)> createParamCallbackFunc;
 
 	StringArray inputNames;
 
@@ -37,12 +37,15 @@ public:
 	void rebuildFromTemplate(bool clearData);
 
 	void addItemInternal(CustomValuesCommandArgument* item, var data) override;
+	void addItemsInternal(Array<CustomValuesCommandArgument*> items, var data) override;
 	void removeItemInternal(CustomValuesCommandArgument* i) override;
+	void removeItemsInternal(Array<CustomValuesCommandArgument*> items) override;
 
-	CustomValuesCommandArgument* addItemWithParam(Parameter* p, var data = var(), bool fromUndoableAction = false);
-	CustomValuesCommandArgument* addItemFromType(Parameter::Type type, var data = var(), bool fromUndoableAction = false);
-	Parameter* createParameterFromType(Parameter::Type type, var data = var(), int index = 0);
+	CustomValuesCommandArgument* createItemWithParam(Parameter* p);
+	CustomValuesCommandArgument* createItemFromType(Parameter::Type type);
+	Parameter* createParameterFromType(Parameter::Type type);
 	CustomValuesCommandArgument* addItemFromData(var data, bool fromUndoableAction = false) override;
+	Array<CustomValuesCommandArgument*> addItemsFromData(var data, bool fromUndoableAction = false) override;
 
 
 	static var addItemWithTypeFromScript(const var::NativeFunctionArgs& a); // will override the "addItem" method from BaseManager
@@ -53,7 +56,9 @@ public:
 
 
 	void itemAdded(CustomValuesCommandArgument* i) override; //FROM TEMPLATE
+	void itemsAdded(Array<CustomValuesCommandArgument*> items) override; //FROM TEMPLATE
 	void itemRemoved(CustomValuesCommandArgument* i) override; //FROM TEMPLATE
+	void itemsRemoved(Array<CustomValuesCommandArgument*> items) override; //FROM TEMPLATE
 	void loadJSONDataInternal(var data) override;
 
 

@@ -8,7 +8,9 @@
   ==============================================================================
 */
 
-const String HTTPModule::requestMethodNames[TYPE_MAX]{ "GET", "POST","PUT", "PATCH", "DELETE"};
+#include "Module/ModuleIncludes.h"
+
+const String HTTPModule::requestMethodNames[TYPE_MAX]{ "GET", "POST","PUT", "PATCH", "DELETE" };
 
 HTTPModule::HTTPModule(const String& name) :
 	Module(name),
@@ -19,6 +21,7 @@ HTTPModule::HTTPModule(const String& name) :
 
 	baseAddress = moduleParams.addStringParameter("Base Address", "The base adress to prepend to command addresses", "https://rickandmortyapi.com/api/");
 	autoAdd = moduleParams.addBoolParameter("Auto add", "If checked, will try to add values depending on received data and expected data type", true);
+  timeout = moduleParams.addIntParameter("Timeout", "The number of ms before giving up on a request", 2000);
 	protocol = moduleParams.addEnumParameter("Protocol", "The type of content to expect when receiving data");
 	protocol->addOption("Raw", RAW)->addOption("JSON", JSON)->addOption("XML", XML);
 
@@ -37,12 +40,12 @@ HTTPModule::HTTPModule(const String& name) :
 	defManager->add(CommandDefinition::createDef(this, "", "Request with payload", &HTTPCommand::create, CommandContext::BOTH)->addParam("contentType", HTTPCommand::PLAIN));
 	defManager->add(CommandDefinition::createDef(this, "", "Upload file", &HTTPCommand::create, CommandContext::BOTH)->addParam("contentType", HTTPCommand::FILE));
 
-	scriptObject.setMethod(sendGETId, HTTPModule::sendGETFromScript);
-	scriptObject.setMethod(sendPOSTId, HTTPModule::sendPOSTFromScript);
-	scriptObject.setMethod(sendPUTId, HTTPModule::sendPUTFromScript);
-	scriptObject.setMethod(sendPATCHId, HTTPModule::sendPATCHFromScript);
-	scriptObject.setMethod(sendDELETEId, HTTPModule::sendDELETEFromScript);
-	scriptObject.setMethod(uploadFileId, HTTPModule::uploadFileFromScript);
+	scriptObject.getDynamicObject()->setMethod(sendGETId, HTTPModule::sendGETFromScript);
+	scriptObject.getDynamicObject()->setMethod(sendPOSTId, HTTPModule::sendPOSTFromScript);
+	scriptObject.getDynamicObject()->setMethod(sendPUTId, HTTPModule::sendPUTFromScript);
+	scriptObject.getDynamicObject()->setMethod(sendPATCHId, HTTPModule::sendPATCHFromScript);
+	scriptObject.getDynamicObject()->setMethod(sendDELETEId, HTTPModule::sendDELETEFromScript);
+	scriptObject.getDynamicObject()->setMethod(uploadFileId, HTTPModule::uploadFileFromScript);
 	scriptManager->scriptTemplate += ChataigneAssetManager::getInstance()->getScriptTemplate("http");
 
 	startThread();
@@ -58,7 +61,7 @@ void HTTPModule::sendRequest(StringRef address, RequestMethod method, ResultData
 
 	String urlString = baseAddress->stringValue() + address;
 	URL url = URL(urlString);
-	if(file.existsAsFile())
+	if (file.existsAsFile())
 	{
 		url = url.withFileToUpload(payload, file, MIMETypes::getMIMEType(file.getFileExtension()));
 	}
@@ -72,21 +75,17 @@ void HTTPModule::sendRequest(StringRef address, RequestMethod method, ResultData
 	outActivityTrigger->trigger();
 	if (logOutgoingData->boolValue())  NLOG(niceName, "Send " + requestMethodNames[(int)method] + " Request : " + url.toString(true));
 
-	requests.getLock().enter();
 	requests.add(new Request(url, method, dataType, extraHeaders));
-	requests.getLock().exit();
 }
 
 void HTTPModule::processRequest(Request* request)
 {
-	GenericScopedLock rLock(requests.getLock());
-
 	StringPairArray responseHeaders;
 	int statusCode = 0;
 
 	std::unique_ptr<InputStream> stream(request->url.createInputStream(
 		URL::InputStreamOptions(request->method == METHOD_POST ? URL::ParameterHandling::inPostData : URL::ParameterHandling::inAddress)
-		.withConnectionTimeoutMs(2000)
+		.withConnectionTimeoutMs(timeout->intValue())
 		.withExtraHeaders(request->extraHeaders)
 		.withResponseHeaders(&responseHeaders)
 		.withStatusCode(&statusCode)
@@ -374,13 +373,17 @@ var HTTPModule::uploadFileFromScript(const var::NativeFunctionArgs& args)
 
 void HTTPModule::run()
 {
+
 	while (!threadShouldExit())
 	{
+		OwnedArray<Request> tmpRequests;
 		requests.getLock().enter();
-
-		for (auto& r : requests) processRequest(r);
-		requests.clear();
+		for (auto& r : requests) tmpRequests.add(new Request(*r));
 		requests.getLock().exit();
+
+
+		for (auto& r : tmpRequests) processRequest(r);
+		requests.clear();
 		wait(10);
 	}
 }

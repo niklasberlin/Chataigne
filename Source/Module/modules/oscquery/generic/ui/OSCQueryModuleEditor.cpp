@@ -8,6 +8,8 @@
   ==============================================================================
 */
 
+#include "Module/ModuleIncludes.h"
+
 OSCQueryModuleOutputEditor::OSCQueryModuleOutputEditor(OSCQueryOutput* output, bool isRoot) :
 	EnablingControllableContainerEditor(output, isRoot),
 	zeroconfMenu("Auto detect")
@@ -33,9 +35,20 @@ void OSCQueryModuleOutputEditor::showMenuAndSetupOutput()
 			if (service != nullptr)
 			{
 				GenericOSCQueryModule* o = ((OSCQueryOutput*)container.get())->module;
+				bool isSame = o->useLocal->boolValue() == service->isLocal
+					&& o->remoteHost->stringValue() == service->getIP()
+					&& o->remotePort->intValue() == service->port;
+
+				if (isSame)
+				{
+					o->syncTrigger->trigger();
+					return;
+				}
+
 				o->useLocal->setValue(service->isLocal);
 				o->remoteHost->setValue(service->getIP());
 				o->remotePort->setValue(service->port);
+
 			}
 		}
 	);
@@ -45,28 +58,4 @@ void OSCQueryModuleOutputEditor::buttonClicked(Button* b)
 {
 	EnablingControllableContainerEditor::buttonClicked(b);
 	if (b == &zeroconfMenu) showMenuAndSetupOutput();
-}
-
-GenericOSCQueryValueContainerEditor::GenericOSCQueryValueContainerEditor(GenericOSCQueryValueContainer* cc, bool isRoot) :
-	GenericControllableContainerEditor(cc, isRoot)
-{
-	enableListenUI.reset(cc->enableListen->createToggle());
-	addAndMakeVisible(enableListenUI.get());
-
-	syncUI.reset(cc->syncContent->createToggle());
-	addAndMakeVisible(syncUI.get());
-}
-
-GenericOSCQueryValueContainerEditor::~GenericOSCQueryValueContainerEditor()
-{
-}
-
-void GenericOSCQueryValueContainerEditor::resizedInternalHeader(Rectangle<int>& r)
-{
-	GenericControllableContainerEditor::resizedInternalHeader(r);
-	enableListenUI->setVisible(container->controllables.size() > 1);
-	enableListenUI->setBounds(r.removeFromRight(60).reduced(3));
-	r.removeFromRight(16);
-	syncUI->setVisible(container->controllables.size() > 1);
-	syncUI->setBounds(r.removeFromRight(60).reduced(3));
 }

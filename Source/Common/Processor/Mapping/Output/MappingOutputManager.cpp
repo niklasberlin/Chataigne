@@ -8,6 +8,8 @@
   ==============================================================================
 */
 
+#include "Common/Processor/ProcessorIncludes.h"
+
 MappingOutputManager::MappingOutputManager(Multiplex * multiplex) :
 	BaseManager<MappingOutput>("Outputs"),
 	MultiplexTarget(multiplex),
@@ -48,7 +50,8 @@ void MappingOutputManager::setOutParams(Array<Parameter *> params, int multiplex
 	outParams.set(multiplexIndex, Array<WeakReference<Parameter>>(params.getRawDataPointer(), params.size()));
 	if(outParams.size() > 0) for (auto &o : items) o->setOutParams(outParams[multiplexIndex], multiplexIndex); //better than this ? should handle all ?
 
-	prevMergedValue = getMergedOutValue(multiplexIndex);
+	prevMergedValue.ensureStorageAllocated(multiplexIndex+1);
+	prevMergedValue.set(multiplexIndex, getMergedOutValue(multiplexIndex));
 
 	omAsyncNotifier.addMessage(new OutputManagerEvent(OutputManagerEvent::OUTPUT_CHANGED));
 }
@@ -58,10 +61,10 @@ void MappingOutputManager::updateOutputValues(int multiplexIndex, bool sendOnOut
 {
 	var value = getMergedOutValue(multiplexIndex);
 	if (value.isVoid()) return; //possible if parameters have been deleted in another thread during process
-	if (sendOnOutputChangedOnly && value == prevMergedValue) return;
+	if (sendOnOutputChangedOnly && value == prevMergedValue[multiplexIndex]) return;
 
 	for (auto& i : items) i->setValue(value, multiplexIndex);
-	prevMergedValue = value;
+	prevMergedValue.set(multiplexIndex, value);
 }
 
 void MappingOutputManager::updateOutputValue(MappingOutput * o, int multiplexIndex)
@@ -113,11 +116,16 @@ void MappingOutputManager::removeItemInternal(MappingOutput * o)
 
 void MappingOutputManager::commandChanged(BaseCommandHandler * h)
 {
-	for (int i = 0; i < getMultiplexCount(); i++) updateOutputValue(dynamic_cast<MappingOutput *>(h), i);
+	for (auto& o : items) o->updateCommandOutParams();
+	for (int i = 0; i < getMultiplexCount(); i++)
+	{
+		updateOutputValue(dynamic_cast<MappingOutput *>(h), i);
+	}
 }
 
 void MappingOutputManager::commandUpdated(BaseCommandHandler * h)
 {
+	for (auto& o : items) o->updateCommandOutParams();
 	for (int i = 0; i < getMultiplexCount(); i++) updateOutputValue(dynamic_cast<MappingOutput *>(h), i);
 }
 
@@ -126,7 +134,7 @@ void MappingOutputManager::multiplexPreviewIndexChanged()
 	omAsyncNotifier.addMessage(new OutputManagerEvent(OutputManagerEvent::OUTPUT_CHANGED));
 }
 
-InspectableEditor * MappingOutputManager::getEditorInternal(bool isRoot, Array<Inspectable*> inspectables)
+InspectableEditor * MappingOutputManager::getEditorInternal(bool _isRoot, Array<Inspectable*> inspectables)
 {
-	return new MappingOutputManagerEditor(this, isRoot);
+	return new MappingOutputManagerEditor(this, _isRoot);
 }

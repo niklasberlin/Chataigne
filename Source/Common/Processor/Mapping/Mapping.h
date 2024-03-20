@@ -29,6 +29,7 @@ public:
 	ControllableContainer outValuesCC;
 
 	IntParameter* updateRate;
+	BoolParameter* forceContinuousProcess;
 	BoolParameter* sendOnInputChangeOnly;
 	BoolParameter* sendOnOutputChangeOnly;
 	BoolParameter* sendAfterLoad;
@@ -64,7 +65,9 @@ public:
 	void afterLoadJSONDataInternal() override;
 
 	void itemAdded(MappingInput*) override;
+	void itemsAdded(Array<MappingInput*>) override;
 	void itemRemoved(MappingInput*) override;
+	void itemsRemoved(Array<MappingInput*>) override;
 	void itemsReordered() override; //MappingInput
 
 	void inputReferenceChanged(MappingInput*) override;
@@ -72,6 +75,7 @@ public:
 	void inputParameterRangeChanged(MappingInput*) override;
 
 	void onContainerParameterChangedInternal(Parameter* p) override;
+	void onControllableFeedbackUpdateInternal(ControllableContainer* cc, Controllable* c) override;
 	void onControllableStateChanged(Controllable* c) override;
 
 	void filterManagerNeedsRebuild(MappingFilter* afterThisFilter, bool rangeOnly) override;

@@ -9,7 +9,7 @@
 */
 
 #include "Module/ModuleIncludes.h"
-#include "JuceHeader.h"
+#include "Common/Processor/ProcessorIncludes.h"
 
 StandardCondition::StandardCondition(var params, Multiplex* processor) :
 	Condition(getTypeStringStatic(params.getProperty("listMode", false)), params, processor),
@@ -109,8 +109,6 @@ void StandardCondition::updateSourceFromTarget()
 
 		if (sourceControllable != nullptr)
 		{
-			DBG("Add Parameter Listener");
-
 			if (sourceControllable->type == Controllable::TRIGGER) ((Trigger*)sourceControllable.get())->addTriggerListener(this);
 			else ((Parameter*)sourceControllable.get())->addParameterListener(this);
 		}

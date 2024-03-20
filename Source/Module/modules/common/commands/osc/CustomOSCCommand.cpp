@@ -14,7 +14,7 @@ CustomOSCCommand::CustomOSCCommand(IOSCSenderModule* module, CommandContext cont
 	OSCCommand(module, context, params, multiplex),
 	addressHasWildcards(false)
 {
-	autoLoadPreviousCommandData = true;
+	//autoLoadPreviousCommandData = true;
 
 	address->setControllableFeedbackOnly(false);
 	address->isSavable = true;
@@ -128,15 +128,41 @@ void CustomOSCCommand::onContainerParameterChanged(Parameter* p)
 			{
 				wildcardsContainer.reset(new CustomValuesCommandArgumentManager("Address Wildcards", context == MAPPING, linkedTemplate != nullptr, multiplex));
 				addChildControllableContainer(wildcardsContainer.get());
+				wildcardsContainer->addBaseManagerListener(this);
 			}
 		}
 		else
 		{
 			if (wildcardsContainer != nullptr)
 			{
-				removeChildControllableContainer(wildcardsContainer.get());
+				wildcardsContainer->removeBaseManagerListener(this);
+				removeChildControllableContainer(wildcardsContainer.get());;
 				wildcardsContainer.reset();
 			}
+		}
+
+		if (!isCurrentlyLoadingData) commandListeners.call(&CommandListener::commandContentChanged);
+	}
+}
+
+void CustomOSCCommand::itemAdded(CustomValuesCommandArgument* i)
+{
+	OSCCommand::itemAdded(i);
+	if (isCurrentlyLoadingData) return;
+	if (i->parentContainer == wildcardsContainer.get()) commandListeners.call(&CommandListener::commandContentChanged);
+}
+
+void CustomOSCCommand::itemsAdded(Array<CustomValuesCommandArgument*> items)
+{
+	OSCCommand::itemsAdded(items);
+
+	if (isCurrentlyLoadingData) return;
+	for (auto& i : items)
+	{
+		if (i->parentContainer == wildcardsContainer.get())
+		{
+			commandListeners.call(&CommandListener::commandContentChanged);
+			break;
 		}
 	}
 }

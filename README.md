@@ -117,12 +117,17 @@ Chataigne is using a modified version of JUCE. So you first need to compile the 
   git clone --recursive http://github.com/benkuper/Chataigne
   ```
   - Launch the Projucer and open Chataigne.jucer
+  - Set your Global Paths (see picture below) 
   - Save the jucer
   - Open the solution for you platform in the Builds folder
   - Build the solution from your IDE and compile it or make in linux
   - Check the dependency section below if you have dependency problems when running Chataigne
   - Enjoy !
   
+
+### Setting JUCE Global Paths
+  
+ ![Don't forget to set the paths  !](http://benjamin.kuperberg.fr/chataigne/user/images/juce_paths.png?) 
   
 ## Dependencies
 
@@ -189,3 +194,7 @@ Choose your angel weapon :
 [![Click click click !](http://benjamin.kuperberg.fr/chataigne/user/images/github_sponsors.png)](https://github.com/sponsors/benkuper)
 
 <a href="https://www.patreon.com/bePatron?u=23293310"><img src="https://c5.patreon.com/external/logo/become_a_patron_button@2x.png" width="140"></a>
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=benkuper/Chataigne&type=Date)](https://star-history.com/#benkuper/Chataigne&Date)

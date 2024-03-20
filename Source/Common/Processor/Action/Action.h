@@ -36,6 +36,7 @@ public:
 	std::unique_ptr<ConsequenceManager> csmOff;
 
 	Trigger* triggerOn;
+	Trigger* triggerOff;
 	Trigger* triggerPreview;
 
 	//to allow for checking before conditions sending it, to overcome listener-order problems
@@ -60,7 +61,9 @@ public:
 	void conditionManagerValidationChanged(ConditionManager*, int multiplexIndex, bool dispatchOnChangeOnly) override;
 
 	void itemAdded(Condition*) override;
+	void itemsAdded(Array<Condition*> items) override;
 	void itemRemoved(Condition*) override;
+	void itemsRemoved(Array<Condition*> items) override;
 
 	virtual void highlightLinkedInspectables(bool value) override;
 

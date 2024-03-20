@@ -8,6 +8,8 @@
   ==============================================================================
 */
 
+#include "Module/ModuleIncludes.h"
+
 MQTTClientModule::MQTTClientModule(const String& name, bool canHaveInput, bool canHaveOutput) :
 	Module(name),
 	Thread("MQTT"),
@@ -15,17 +17,18 @@ MQTTClientModule::MQTTClientModule(const String& name, bool canHaveInput, bool c
 	mosquittopp("Chataigne"),
 #endif
 	authenticationCC("Authentication"),
-	topicsCC("Topics")
+	topicsManager("Topics")
 {
 
 #if JUCE_WINDOWS
 	mosqpp::lib_init();
+	threaded_set(true);
 #else
 	NLOGWARNING(niceName, "MQTT is only supported on windows right now.");
 #endif
 
-	protocol = moduleParams.addEnumParameter("Protocol", "How to parse the incoming data");
-	protocol->addOption("JSON", JSON)->addOption("Raw", RAW);
+	protocol = moduleParams.addEnumParameter("Default Protocol", "How to parse the incoming data");
+	protocol->addOption("JSON", MQTTTopic::JSON)->addOption("Raw", MQTTTopic::RAW);
 
 	host = moduleParams.addStringParameter("Host", "The MQTT Broker's host address", "127.0.0.1");
 	port = moduleParams.addIntParameter("Port", "The MQTT Broker's port", 1883, 1, 65535);
@@ -41,9 +44,9 @@ MQTTClientModule::MQTTClientModule(const String& name, bool canHaveInput, bool c
 	authenticationCC.enabled->setValue(false);
 	moduleParams.addChildControllableContainer(&authenticationCC);
 
-	topicsCC.userCanAddControllables = true;
-	topicsCC.customUserCreateControllableFunc = std::bind(&MQTTClientModule::topicsCreateCallback, this, std::placeholders::_1);
-	moduleParams.addChildControllableContainer(&topicsCC);
+	moduleParams.addChildControllableContainer(&topicsManager);
+	topicsManager.selectItemWhenCreated = false;
+	topicsManager.addBaseManagerListener(this);
 
 	includeValuesInSave = true;
 	valuesCC.saveAndLoadRecursiveData = true;
@@ -56,7 +59,8 @@ MQTTClientModule::MQTTClientModule(const String& name, bool canHaveInput, bool c
 
 MQTTClientModule::~MQTTClientModule()
 {
-	stopThread(1000);
+	topicsManager.removeBaseManagerListener(this);
+	stopClient();
 }
 
 void MQTTClientModule::clearItem()
@@ -75,7 +79,10 @@ void MQTTClientModule::onContainerParameterChangedInternal(Parameter* p)
 	if (p == enabled)
 	{
 		if (enabled->boolValue()) startThread();
-		else stopThread(1000);
+		else
+		{
+			stopClient();
+		}
 	}
 }
 
@@ -87,11 +94,11 @@ void MQTTClientModule::onControllableFeedbackUpdateInternal(ControllableContaine
 	{
 		if (c == host || c == port || c == keepAlive || c == authenticationCC.enabled || c == username || c == pass /* || c == useTLS*/)
 		{
-			stopThread(1000);
+			stopClient();
 			if (enabled->boolValue()) startThread();
 		}
 
-		if (c->parentContainer == &topicsCC || c == protocol)
+		if (dynamic_cast<MQTTTopic*>(c->parentContainer.get()) != nullptr || c == protocol)
 		{
 			updateTopicSubs();
 		}
@@ -101,29 +108,8 @@ void MQTTClientModule::onControllableFeedbackUpdateInternal(ControllableContaine
 	{
 		for (auto& cc : valuesCC.controllableContainers) cc->clear();
 	}
-
 }
 
-void MQTTClientModule::childStructureChanged(ControllableContainer* cc)
-{
-	Module::childStructureChanged(cc);
-
-	if (!isCurrentlyLoadingData)
-	{
-		if (cc == &moduleParams)
-		{
-			updateTopicSubs();
-		}
-	}
-}
-
-void MQTTClientModule::topicsCreateCallback(ControllableContainer* cc)
-{
-	StringParameter* p = topicsCC.addStringParameter("Topic 1", "Topic to subscribe to", "");
-	p->saveValueOnly = false;
-	p->isRemovableByUser = true;
-	topicsCC.queuedNotifier.addMessage(new ContainerAsyncEvent(ContainerAsyncEvent::ControllableContainerNeedsRebuild, &topicsCC));
-}
 
 void MQTTClientModule::publishMessage(const String& topic, const String& message)
 {
@@ -145,63 +131,120 @@ void MQTTClientModule::publishMessage(const String& topic, const String& message
 #endif
 }
 
-void MQTTClientModule::updateTopicSubs(bool keepData)
+void MQTTClientModule::itemAdded(MQTTTopic* item)
 {
-	var oldData(new DynamicObject());
+	if (!isCurrentlyLoadingData) updateTopicSubs();
+}
+
+void MQTTClientModule::itemsAdded(Array<MQTTTopic*> items)
+{
+	if (!isCurrentlyLoadingData) updateTopicSubs();
+}
+
+void MQTTClientModule::itemRemoved(MQTTTopic* item)
+{
+	if (isCurrentlyLoadingData) return;
 
 #if JUCE_WINDOWS
-	for (int i = 0; i < topicsCC.controllables.size(); i++)
-	{
-		int mid = topicMap[i];
-		String t = ((StringParameter*)topicsCC.controllables[i])->stringValue();
-		unsubscribe(&mid, t.toStdString().c_str());
-
-		if (ControllableContainer* cc = valuesCC.getControllableContainerByName(t))
-		{
-			oldData.getDynamicObject()->setProperty(t, cc->getJSONData());
-		}
-	}
+	unsubscribe(&item->mid, item->topic->stringValue().toStdString().c_str());
 #endif
+	updateTopicSubs();
+}
+
+void MQTTClientModule::itemsRemoved(Array<MQTTTopic*> items)
+{
+	if (isCurrentlyLoadingData) return;
+
+#if JUCE_WINDOWS
+	for (auto& item : items) unsubscribe(&item->mid, item->topic->stringValue().toStdString().c_str());
+#endif
+	updateTopicSubs();
+}
+
+void MQTTClientModule::updateTopicSubs()
+{
+	GenericScopedLock lock(updateTopicLock);
+
+	//valuesCC.clear();
+	topicItemMap.clear();
 
 
-	valuesCC.clear();
-	topicMap.clear();
-
-	for (auto& c : topicsCC.controllables)
+	for (auto& topic : topicsManager.items)
 	{
-		String s = ((StringParameter*)c)->stringValue();
+		String s = topic->topic->stringValue();
 		if (s.isEmpty()) continue;
 
-		Protocol p = protocol->getValueDataAsEnum<Protocol>();
+		MQTTTopic::Protocol p = topic->protocol->getValueDataAsEnum<MQTTTopic::Protocol>();
+		if (p == MQTTTopic::DEFAULT) p = protocol->getValueDataAsEnum<MQTTTopic::Protocol>();
 
 		switch (p)
 		{
-		case JSON:
+		case MQTTTopic::JSON:
 		{
-			ControllableContainer* cc = new ControllableContainer(s);
-			cc->userCanAddControllables = true;
-			cc->saveAndLoadRecursiveData = true;
-			cc->saveAndLoadName = true;
-			if (oldData.hasProperty(s)) cc->loadJSONData(oldData.getDynamicObject()->getProperty(s));
-			valuesCC.addChildControllableContainer(cc, true);
+			//cleanup
+			if (Parameter* p = valuesCC.getParameterByName(s, true)) valuesCC.removeControllable(p);
+
+			ControllableContainer* cc = valuesCC.getControllableContainerByName(s, true);
+			if (cc == nullptr)
+			{
+				cc = new ControllableContainer(s);
+				cc->userCanAddControllables = true;
+				cc->saveAndLoadRecursiveData = true;
+				cc->saveAndLoadName = true;
+				valuesCC.addChildControllableContainer(cc, true);
+			}
 		}
 		break;
 
-		case RAW:
+		case MQTTTopic::RAW:
 		{
-			StringParameter* b = valuesCC.addStringParameter(s, "Last received message for this topic", "");
-			b->isSavable = false;
+			//cleanup
+			if (ControllableContainer* cc = valuesCC.getControllableContainerByName(s, true)) valuesCC.removeChildControllableContainer(cc);
+
+			StringParameter* b = dynamic_cast<StringParameter*>(valuesCC.getParameterByName(s, true));
+			if (b == nullptr) b = valuesCC.addStringParameter(s, "Last received message for this topic", "");
 		}
 		break;
 		}
 
-
-		int mid = 0;
 #if JUCE_WINDOWS
-		subscribe(&mid, s.toStdString().c_str());
+		subscribe(&topic->mid, s.toStdString().c_str());
 #endif
-		topicMap.add(mid);
+		topicItemMap.set(s, topic);
 	}
+
+	Array<Controllable*> controllablesToRemove;
+	for (auto& c : valuesCC.controllables)
+	{
+		bool found = false;
+		for (auto& top : topicsManager.items)
+		{
+			if (top->topic->stringValue() == c->niceName)
+			{
+				found = true;
+				break;
+			}
+		}
+		if (!found) controllablesToRemove.add(c);
+	}
+
+	Array<ControllableContainer*> containersToRemove;
+	for (auto& cc : valuesCC.controllableContainers)
+	{
+		bool found = false;
+		for (auto& top : topicsManager.items)
+		{
+			if (top->topic->stringValue() == cc->niceName)
+			{
+				found = true;
+				break;
+			}
+		}
+		if (!found) containersToRemove.add(cc);
+	}
+
+	for (auto& c : controllablesToRemove) valuesCC.removeControllable(c);
+	for (auto& cc : containersToRemove) valuesCC.removeChildControllableContainer(cc);
 
 	valuesCC.queuedNotifier.addMessage(new ContainerAsyncEvent(ContainerAsyncEvent::ControllableContainerNeedsRebuild, &valuesCC));
 }
@@ -235,10 +278,10 @@ void MQTTClientModule::run()
 
 	int result = connect(host->stringValue().toStdString().c_str(), port->intValue(), keepAlive->intValue());
 
-
 	if (result == 0)
 	{
 		NLOG(niceName, "Connected");
+		isConnected->setValue(true);
 	}
 	else
 	{
@@ -247,22 +290,41 @@ void MQTTClientModule::run()
 	}
 
 
+	loop_forever();
+
 
 	while (!threadShouldExit())
 	{
-		int rc = loop();
-		if (rc)
-		{
-			//LOG("Disconnected, reconnect");
-			reconnect();
-			//LOG("Reconnection : " << rr);
-		}
-		//wait(2);
+		//int rc = -1;
+
+		//{
+		//	rc = loop();
+		//}
+
+		//if (rc)
+		//{
+		//	LOG("Disconnected, reconnect");
+		//	int rr = reconnect();
+		//	LOG("Reconnection : " << rr);
+		//}
+
+		wait(2);
 	}
+
+	loop_stop();
 
 	isConnected->setValue(false);
 	disconnect();
 #endif
+}
+
+void MQTTClientModule::stopClient()
+{
+#if JUCE_WINDOWS
+	loop_stop();
+	disconnect();
+#endif
+	stopThread(1000);
 }
 
 #if JUCE_WINDOWS
@@ -274,21 +336,20 @@ void MQTTClientModule::on_connect(int rc)
 
 	if (rc != 0) return;
 
+	GenericScopedLock lock(updateTopicLock);
+
 	//Subscribe
-	for (int i = 0; i < topicsCC.controllables.size(); i++)
+	for (auto& t : topicsManager.items)
 	{
-		int mid = topicMap[i];
-		String topic = ((StringParameter*)topicsCC.controllables[i])->stringValue();
+		String topic = t->topic->stringValue();
 		if (topic.isEmpty()) continue;
-		subscribe(&mid, topic.toStdString().c_str());
-		DBG(mid << " <> " << topicMap[i]);
-		topicMap.set(i, mid);
+		subscribe(&t->mid, topic.toStdString().c_str());
 	}
 }
 
 void MQTTClientModule::on_disconnect(int rc)
 {
-	if(rc != 14) LOG("MQTT Disconnected : " << rc); //14 is loop disconnection, autoreconnect
+	if (rc != 14) LOG("MQTT Disconnected : " << rc); //14 is loop disconnection, autoreconnect
 	isConnected->setValue(false);
 	if (rc != 0) reconnect();
 }
@@ -301,6 +362,8 @@ void MQTTClientModule::on_publish(int mid)
 void MQTTClientModule::on_message(const mosquitto_message* message)
 {
 	if (!enabled->boolValue()) return;
+
+	GenericScopedLock lock(updateTopicLock);
 
 	String topic(message->topic);
 	String data((char*)message->payload, message->payloadlen);
@@ -317,10 +380,24 @@ void MQTTClientModule::on_message(const mosquitto_message* message)
 
 	inActivityTrigger->trigger();
 
-	Protocol p = protocol->getValueDataAsEnum<Protocol>();
+	if (!topicItemMap.contains(topic))
+	{
+		NLOGWARNING(niceName, "Received message from unknown topic " << topic);
+		return;
+	}
+
+	MQTTTopic* topicItem = topicItemMap[topic];
+	if (topicItem == nullptr) return;
+
+
+	if (!topicItem->enabled->boolValue()) return;
+
+	MQTTTopic::Protocol p = topicItem->protocol->getValueDataAsEnum<MQTTTopic::Protocol>();
+	if (p == MQTTTopic::DEFAULT) p = protocol->getValueDataAsEnum<MQTTTopic::Protocol>();
+
 	switch (p)
 	{
-	case JSON:
+	case MQTTTopic::JSON:
 	{
 		if (ControllableContainer* cc = valuesCC.getControllableContainerByName(topic, true))
 		{
@@ -330,7 +407,7 @@ void MQTTClientModule::on_message(const mosquitto_message* message)
 	}
 	break;
 
-	case RAW:
+	case MQTTTopic::RAW:
 	{
 		if (Parameter* p = valuesCC.getParameterByName(topic, true))
 		{
@@ -363,3 +440,21 @@ void MQTTClientModule::on_error()
 	NLOGERROR(niceName, "Error !");
 }
 #endif
+
+MQTTTopic::MQTTTopic(var params) :
+	BaseItem(getTypeString()),
+	mid(-1)
+{
+	topic = addStringParameter("Topic", "Topic to subscribe to", "");
+	protocol = addEnumParameter("Protocol", "How to parse the incoming data");
+	protocol->addOption("Default", DEFAULT)->addOption("JSON", JSON)->addOption("Raw", RAW);
+}
+
+MQTTTopic::~MQTTTopic()
+{
+}
+
+//InspectableEditor* MQTTTopic::getEditorInternal(bool isRoot, Array<Inspectable*> inspectables)
+//{
+//	return new MQTTTopicEditor(this, isRoot);
+//}

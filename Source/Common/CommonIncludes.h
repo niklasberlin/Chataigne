@@ -12,22 +12,20 @@
 
 #include "JuceHeader.h"
 
-#include "Serial/lib/cobs/cobs.h"
-#include "Serial/SerialDevice.h"
-#include "Serial/SerialManager.h"
-#include "Serial/SerialDeviceParameter.h"
+#ifndef BLE_SUPPORT
+#define BLE_SUPPORT 0
+#endif
 
-#include "DMX/DMXManager.h"
-#include "DMX/DMXUniverse.h"
-#include "DMX/DMXUniverseManager.h"
-#include "DMX/device/DMXDevice.h"
-#include "DMX/device/DMXSerialDevice.h"
-#include "DMX/device/DMXArtNetDevice.h"
-#include "DMX/device/DMXEnttecProDevice.h"
-#include "DMX/device/DMXOpenUSBDevice.h"
-#include "DMX/device/DMXSACNDevice.h"
+#if BLE_SUPPORT
+#include "simpleble/SimpleBLE.h"
+using namespace SimpleBLE;
 
-#include "DMX/ui/DMXUniverseEditor.h"
+#include "BLE/BLEDevice.h"
+#include "BLE/BLEManager.h"
+#include "BLE/BLEDeviceParameter.h"
+
+#endif
+
 
 #include "MIDI/MIDIDevice.h"
 #include "MIDI/MIDIManager.h"
@@ -36,6 +34,7 @@
 #include "MIDI/MTCSender.h"
 #include "MIDI/ui/MIDIDeviceChooser.h"
 #include "MIDI/ui/MIDIDeviceParameterUI.h"
+
 
 //#include "LTC/config.h"
 #include "LTC/ltc.h"
@@ -46,3 +45,4 @@
 
 #include "InputSystem/InputSystemManager.h"
 #include "InputSystem/InputDeviceHelpers.h"
+

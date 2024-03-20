@@ -8,6 +8,8 @@
   ==============================================================================
 */
 
+#include "Module/ModuleIncludes.h"
+
 MIDICommand::MIDICommand(MIDIModule* module, CommandContext context, var params, Multiplex* multiplex) :
 	BaseCommand(module, context, params, multiplex),
 	midiModule(module)
@@ -99,7 +101,7 @@ void MIDINoteAndCCCommand::updateNoteParams()
 		}
 		octave = new IntParameter("Octave", "Octave for the note", 0, -10, 10);
 
-		removeControllable(number);
+		if(number != nullptr) removeControllable(number);
 		number = nullptr;
 
 		addParameter(noteEnum, controllables.indexOf(channel) + 1);
@@ -138,7 +140,7 @@ int MIDINoteAndCCCommand::getPitchFromNote(int multiplexIndex)
 	if (octave == nullptr || noteEnum == nullptr || moduleRef.wasObjectDeleted()) return 0;
 
 	int octavePitch = ((int)getLinkedValue(octave, multiplexIndex) + midiModule->octaveShift->intValue() + 2) * 12;
-	return (int)noteEnum->getValueData() + octavePitch;
+	return (int)getLinkedValue(noteEnum, multiplexIndex) + octavePitch;
 }
 
 void MIDINoteAndCCCommand::triggerInternal(int multiplexIndex)

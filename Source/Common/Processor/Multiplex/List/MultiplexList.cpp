@@ -10,7 +10,7 @@
 
 #include "Module/ModuleIncludes.h"
 #include "CustomVariables/CustomVariablesIncludes.h"
-#include "MultiplexList.h"
+#include "Common/Processor/ProcessorIncludes.h"
 
 BaseMultiplexList::BaseMultiplexList(const String& name, var params) :
 	BaseItem(name, false),
@@ -47,6 +47,43 @@ void BaseMultiplexList::updateControllablesSetup()
 		c->setNiceName("#" + String(list.size() + 1));
 		list.add(c);
 		addControllable(c);
+	}
+}
+
+void BaseMultiplexList::fillFromExpression(const String& s, int start, int end)
+{
+	for (int i = jmax(start - 1, 0); i < end; i++)
+	{
+		String exp = s.replace("{index}", String(i + 1)).replace("{index0}", String(i));
+
+		LOG("Exp(#" << (i + 1) << ") : " << exp);
+
+		ScriptExpression e;
+		e.setExpression(exp);
+		if (e.state == ScriptExpression::EXPRESSION_LOADED)
+		{
+			e.evaluate();
+			LOG(" > " << e.currentValue.toString());
+
+			if (list[i]->type == Controllable::TARGET)
+			{
+				if (!e.currentValue.isString() || e.currentValue.toString().isEmpty())
+				{
+					((TargetParameter*)list[i])->resetValue();
+				}
+				else if (e.currentValue.toString() != "{value}")
+				{
+					((TargetParameter*)list[i])->setValue(e.currentValue.toString());
+				}
+			}
+			else
+			{
+				if (!e.currentValue.isVoid())
+				{
+					if (list[i]->type != Controllable::TRIGGER) ((Parameter*)list[i])->setValue(e.currentValue);
+				}
+			}
+		}
 	}
 }
 
@@ -106,12 +143,25 @@ void InputValueMultiplexList::updateControllablesSetup()
 		Controllable* c = list[index];
 		list.removeAllInstancesOf(c);
 		removeControllable(c);
-		if (Controllable* c = inputControllables[index])
+
+		if (Controllable* ic = inputControllables[index])
 		{
-			if (c->type == c->TRIGGER) ((Trigger*)c)->removeTriggerListener(this);
-			else((Parameter*)c)->removeParameterListener(this);
+			if (controllableIndexMap.contains(ic))
+			{
+				controllableIndexMap.getReference(ic).removeAllInstancesOf(index);
+				if (controllableIndexMap.getReference(ic).isEmpty()) controllableIndexMap.remove(ic);
+			}
+
+			if (!controllableIndexMap.contains(ic))
+			{
+				if (ic->type == ic->TRIGGER) ((Trigger*)ic)->removeTriggerListener(this);
+				else((Parameter*)ic)->removeParameterListener(this);
+			}
 		}
+
+		inputControllables.removeLast();
 	}
+
 
 	while (list.size() < listSize)
 	{
@@ -122,6 +172,7 @@ void InputValueMultiplexList::updateControllablesSetup()
 
 		list.add(tp);
 		inputControllables.add(nullptr);
+
 	}
 }
 
@@ -130,23 +181,39 @@ void InputValueMultiplexList::onContainerParameterChangedInternal(Parameter* p)
 	int index = list.indexOf(p);
 	if (index != -1)
 	{
-		if (Controllable* c = inputControllables[index])
+		//Find previous input controllable and remove the map and listener if needed
+		if (Controllable* ic = inputControllables[index])
 		{
-			if (c->type == c->TRIGGER) ((Trigger*)c)->removeTriggerListener(this);
-			else((Parameter*)c)->removeParameterListener(this);
+			if (controllableIndexMap.contains(ic))
+			{
+				controllableIndexMap.getReference(ic).removeAllInstancesOf(index);
+				if (controllableIndexMap.getReference(ic).isEmpty()) controllableIndexMap.remove(ic);
+			}
+
+
+			if (!controllableIndexMap.contains(ic))
+			{
+				if (ic->type == ic->TRIGGER) ((Trigger*)ic)->removeTriggerListener(this);
+				else((Parameter*)ic)->removeParameterListener(this);
+			}
 		}
 
 		inputControllables.set(index, nullptr);
 
 		if (Controllable* c = ((TargetParameter*)p)->target)
 		{
+
 			if (c->type == c->TRIGGER) ((Trigger*)c)->addTriggerListener(this);
 			else((Parameter*)c)->addParameterListener(this);
 			inputControllables.set(index, c);
 
-			listListeners.call(&MultiplexListListener::listReferenceUpdated);
-			notifyItemUpdated(index);
+			if (!controllableIndexMap.contains(c)) controllableIndexMap.set(c, Array<int>(index));
+			else controllableIndexMap.getReference(c).add(index);
+
 		}
+
+		listListeners.call(&MultiplexListListener::listReferenceUpdated);
+		notifyItemUpdated(index);
 	}
 }
 
@@ -157,32 +224,18 @@ void InputValueMultiplexList::onExternalParameterRangeChanged(Parameter* p)
 
 void InputValueMultiplexList::onExternalParameterValueChanged(Parameter* p)
 {
-	notifyItemUpdated(inputControllables.indexOf(p));
+	jassert(controllableIndexMap.contains(p));
+	for (auto& i : controllableIndexMap[p]) notifyItemUpdated(i);
+	//notifyItemUpdated(inputControllables.indexOf(p));
 }
 
 void InputValueMultiplexList::onExternalTriggerTriggered(Trigger* t)
 {
-	notifyItemUpdated(inputControllables.indexOf(t));
+	jassert(controllableIndexMap.contains(t));
+	for (auto& i : controllableIndexMap[t]) notifyItemUpdated(i);
 }
 
-void InputValueMultiplexList::fillFromExpression(const String& s)
-{
-	for (int i = 0; i < listSize; i++)
-	{
-		String exp = s.replace("{index}", String(i + 1)).replace("{index0}", String(i));
 
-		LOG("Exp(#" << (i + 1) << ") : " << exp);
-
-		ScriptExpression e;
-		e.setExpression(exp);
-		if (e.state == ScriptExpression::EXPRESSION_LOADED)
-		{
-			e.evaluate();
-			LOG(" > " << e.currentValue.toString());
-			((TargetParameter*)list[i])->setValue(e.currentValue.toString());
-		}
-	}
-}
 
 InspectableEditor* InputValueMultiplexList::getEditorInternal(bool isRoot, Array<Inspectable*> inspectables)
 {
@@ -260,6 +313,59 @@ void EnumMultiplexList::loadJSONDataMultiplexInternal(var data)
 	}
 
 	updateControllablesSetup();
+}
+
+
+TargetMultiplexList::TargetMultiplexList(var params) :
+	MultiplexList(TargetParameter::getTypeStringStatic() + " List"),
+	containerMode(false)
+{
+}
+
+TargetMultiplexList::~TargetMultiplexList()
+{
+}
+
+
+void TargetMultiplexList::setContainerMode(bool value)
+{
+	containerMode = value;
+	updateControllablesSetup();
+}
+
+
+void TargetMultiplexList::updateControllablesSetup()
+{
+	BaseMultiplexList::updateControllablesSetup();
+
+	for (auto& c : list)
+	{
+		TargetParameter* ep = (TargetParameter*)c;
+		ep->targetType = containerMode ? TargetParameter::CONTAINER : TargetParameter::CONTROLLABLE;
+	}
+}
+
+void TargetMultiplexList::controllableAdded(Controllable* c)
+{
+	((TargetParameter*)c)->targetType = containerMode ? TargetParameter::CONTAINER : TargetParameter::CONTROLLABLE;
+	MultiplexList::controllableAdded(c);
+}
+
+InspectableEditor* TargetMultiplexList::getEditorInternal(bool isRoot, Array<Inspectable*> inspectables)
+{
+	return new TargetMultiplexListEditor(this, isRoot);
+}
+
+var TargetMultiplexList::getJSONData()
+{
+	var data = MultiplexList::getJSONData();
+	data.getDynamicObject()->setProperty("containerMode", containerMode);
+	return data;
+}
+
+void TargetMultiplexList::loadJSONDataMultiplexInternal(var data)
+{
+	setContainerMode((bool)data.getProperty("containerMode", containerMode));
 }
 
 

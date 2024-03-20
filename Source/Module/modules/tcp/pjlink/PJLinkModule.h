@@ -1,9 +1,9 @@
 /*
   ==============================================================================
 
-    PJLinkModule.h
-    Created: 5 Jan 2018 3:41:58pm
-    Author:  Ben
+	PJLinkModule.h
+	Created: 5 Jan 2018 3:41:58pm
+	Author:  Ben
 
   ==============================================================================
 */
@@ -21,8 +21,10 @@ public:
 	PJLinkModule();
 	~PJLinkModule();
 
+	String convertError(String numError);
 	class PJLinkClient :
-		public Thread
+		public Thread,
+		public ControllableContainerListener
 	{
 	public:
 		PJLinkClient(PJLinkModule* m, int id);
@@ -36,15 +38,35 @@ public:
 		EnablingControllableContainer paramsCC;
 		ControllableContainer valuesCC;
 
+		ControllableContainer infosCC;
 		StringParameter* remoteHost;
 		IntParameter* remotePort;
 		BoolParameter* isConnected;
 		StringParameter* password;
 		String passBytes;
-		
+
 		EnumParameter* powerStatus;
 		BoolParameter* shutterVideoStatus;
 		BoolParameter* shutterAudioStatus;
+		Trigger* updateInfo;
+		EnumParameter* inputStatus;
+		StringParameter* inputResolutionInfo;
+		Trigger* updateInput;
+		StringParameter* resolutionRecommendedInfo;
+		StringParameter* brendInfo;
+		StringParameter* productNameInfo;
+		StringParameter* displayNameInfo;
+		StringParameter* softVerInfo;
+		StringParameter* lampHourInfo;
+		StringParameter* filterUsageInfo;
+		StringParameter* lampModelInfo;
+		StringParameter* filterModelInfo;
+		StringParameter* fanErrorInfo;
+		StringParameter* lampErrorInfo;
+		StringParameter* temperatureErrorInfo;
+		StringParameter* coverErrorInfo;
+		StringParameter* filterErrorInfo;
+		StringParameter* otherErrorInfo;
 
 		float timeAtConnect;
 		bool assigningFromRemote;
@@ -55,6 +77,8 @@ public:
 
 		void setupClient();
 		void run() override;
+
+		void controllableContainerNameChanged(ControllableContainer* cc) override;
 	};
 
 	IntParameter* numClients;
@@ -68,11 +92,20 @@ public:
 	BoolParameter* allProjectorsPoweredOn;
 	BoolParameter* allProjectorsPoweredOff;
 
+	StringArray inputListVp;
+	StringArray chooseInput;
+	int numInput, idVpInput;
+	int indexInput = 0;
+
+	const Identifier pjLinkDataReceivedId = "pjLinkDataReceived";
+
 	bool autoRequestIsPower;
+
+	var ghostClientNames;
 
 	void updateClientsSetup();
 
-	PJLinkClient * addClient();
+	PJLinkClient* addClient();
 	void removeClient(PJLinkClient* c);
 
 	virtual void onControllableFeedbackUpdateInternal(ControllableContainer* cc, Controllable* c) override;
@@ -84,14 +117,21 @@ public:
 
 	void sendMessageToClient(const String& message, int id = -1);
 
-	bool isReadyToSend() { return true; }
+	bool isReadyToSend() override { return true; };
 
 	void timerCallback() override;
 	void run() override;
 	void processClient(PJLinkClient* c);
 	void processClientLine(PJLinkClient* c, const String& message);
 
-	static PJLinkModule * create() { return new PJLinkModule(); }
+	void requestInfos();
+	void requestInputName(int id);
+
+
+	var getJSONData() override;
+	void loadJSONDataInternal(var data) override;
+
+	static PJLinkModule* create() { return new PJLinkModule(); }
 	virtual String getDefaultTypeString() const override { return "PJLink"; }
 
 

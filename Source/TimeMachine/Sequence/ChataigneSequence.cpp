@@ -14,12 +14,17 @@ ChataigneSequence::ChataigneSequence() :
 	Sequence(),
 	masterAudioModule(nullptr),
 	masterAudioLayer(nullptr),
-	ltcAudioModule(nullptr)
+	ltcAudioModule(nullptr),
+	mtcFPS(nullptr)
 {
-	midiSyncDevice = new MIDIDeviceParameter("Sync Devices");
+	midiSyncDevice = new MIDIDeviceParameter("Sync Devices", "MIDI Devices to send and/or receive MTC to sync the sequence with external systems.");
 	midiSyncDevice->canBeDisabledByUser = true;
 	midiSyncDevice->enabled = false;
 	addParameter(midiSyncDevice);
+
+	mtcFPS = addEnumParameter("MTC Framerate", "The framerate at which the MTC is sent");
+	mtcFPS->addOption("30", MidiMessage::fps30)->addOption("30 drop", MidiMessage::fps30drop)->addOption("25", MidiMessage::fps25)->addOption("24", MidiMessage::fps24);
+
 
 	ltcModuleTarget = addTargetParameter("LTC Sync Module", "Choose an Audio Module to use as LTC Sync for this sequence", ModuleManager::getInstance(), false);
 	ltcModuleTarget->canBeDisabledByUser = true;
@@ -140,6 +145,53 @@ void ChataigneSequence::targetAudioModuleChanged(ChataigneAudioLayer* layer)
 
 void ChataigneSequence::itemAdded(SequenceLayer* layer)
 {
+	checkForNewAudioLayer(layer, true);
+}
+
+void ChataigneSequence::itemsAdded(Array<SequenceLayer*> layers)
+{
+	int showMenu = true;
+	for (auto& l : layers)
+	{
+		checkForNewAudioLayer(l, showMenu);
+		showMenu = false;
+	}
+}
+
+void ChataigneSequence::itemRemoved(SequenceLayer* layer)
+{
+	ChataigneAudioLayer* a = dynamic_cast<ChataigneAudioLayer*>(layer);
+	if (a != nullptr)
+	{
+		a->removeAudioLayerListener(this);
+		if (masterAudioLayer == a)
+		{
+			masterAudioLayer = nullptr;
+			updateTargetAudioLayer(a);
+		}
+	}
+}
+
+void ChataigneSequence::itemsRemoved(Array<SequenceLayer*> layers)
+{
+	for (auto& layer : layers)
+	{
+		ChataigneAudioLayer* a = dynamic_cast<ChataigneAudioLayer*>(layer);
+		if (a != nullptr)
+		{
+			a->removeAudioLayerListener(this);
+			if (masterAudioLayer == a)
+			{
+				masterAudioLayer = nullptr;
+				updateTargetAudioLayer(a);
+			}
+		}
+	}
+}
+
+
+void ChataigneSequence::checkForNewAudioLayer(SequenceLayer* layer, bool showMenuIfNoAudioModule)
+{
 	ChataigneAudioLayer* audioLayer = dynamic_cast<ChataigneAudioLayer*>(layer);
 	if (audioLayer != nullptr)
 	{
@@ -158,7 +210,7 @@ void ChataigneSequence::itemAdded(SequenceLayer* layer)
 				}
 			}
 
-			if (audioLayer->audioModule == nullptr)
+			if (audioLayer->audioModule == nullptr && showMenuIfNoAudioModule)
 			{
 				AlertWindow::showAsync(
 					MessageBoxOptions().withIconType(AlertWindow::WarningIcon)
@@ -187,19 +239,6 @@ void ChataigneSequence::itemAdded(SequenceLayer* layer)
 	}
 }
 
-void ChataigneSequence::itemRemoved(SequenceLayer* layer)
-{
-	ChataigneAudioLayer* a = dynamic_cast<ChataigneAudioLayer*>(layer);
-	if (a != nullptr)
-	{
-		a->removeAudioLayerListener(this);
-		if (masterAudioLayer == a)
-		{
-			masterAudioLayer = nullptr;
-			updateTargetAudioLayer(a);
-		}
-	}
-}
 
 
 bool ChataigneSequence::timeIsDrivenByAudio()
@@ -233,6 +272,7 @@ void ChataigneSequence::setupMidiSyncDevices()
 	{
 		mtcSender.reset(new MTCSender(midiSyncDevice->outputDevice));
 		mtcSender->setSpeedFactor(playSpeed->floatValue());
+		if (mtcFPS != nullptr) mtcSender->setFPS(mtcFPS->getValueDataAsEnum<MidiMessage::SmpteTimecodeType>());
 	}
 	//	}
 
@@ -287,7 +327,7 @@ void ChataigneSequence::onContainerParameterChangedInternal(Parameter* p)
 			if (isPlaying->boolValue()) mtcSender->start(time);
 			else mtcSender->pause(false);
 		}
-		else if (p == syncOffset)
+		else if (p == syncOffset || p == reverseOffset)
 		{
 			mtcSender->setPosition(time, true);
 		}
@@ -296,6 +336,10 @@ void ChataigneSequence::onContainerParameterChangedInternal(Parameter* p)
 	if (p == midiSyncDevice)
 	{
 		setupMidiSyncDevices();
+	}
+	else if (p == mtcFPS)
+	{
+		if (mtcSender != nullptr) mtcSender->setFPS(mtcFPS->getValueDataAsEnum<MidiMessage::SmpteTimecodeType>());
 	}
 
 	if (p == ltcModuleTarget)
@@ -350,7 +394,11 @@ void ChataigneSequence::onExternalParameterValueChanged(Parameter* p)
 			if (ltcAudioModule->ltcPlaying->boolValue())
 			{
 				double time = ltcAudioModule->ltcTime->floatValue() + (syncOffset->floatValue() * (reverseOffset->boolValue() ? -1 : 1));
-				if (time >= 0 && time < totalTime->floatValue()) playTrigger->trigger();
+				if (time >= 0 && time < totalTime->floatValue())
+				{
+					setCurrentTime(time, true, true);
+					playTrigger->trigger();
+				}
 			}
 			else
 			{
@@ -361,10 +409,7 @@ void ChataigneSequence::onExternalParameterValueChanged(Parameter* p)
 		{
 			double time = ltcAudioModule->ltcTime->floatValue() + (syncOffset->floatValue() * (reverseOffset->boolValue() ? -1 : 1));
 			double diff = fabs(currentTime->floatValue() - time);
-			bool isJump = diff > 1;
-			bool seekMode = isJump || !ltcAudioModule->ltcPlaying->boolValue();
-			if (!isPlaying->boolValue() && time >= 0 && time < totalTime->floatValue()) playTrigger->trigger();
-			setCurrentTime(time, isJump, seekMode);
+			if (diff > 1) setCurrentTime(time, true, true);
 		}
 	}
 }
@@ -389,6 +434,6 @@ void ChataigneSequence::mtcTimeUpdated(bool isFullFrame)
 	double diff = fabs(currentTime->floatValue() - time);
 	bool isJump = diff > 1;
 	bool seekMode = isJump || !mtcReceiver->isPlaying;
-	if (!isPlaying->boolValue() && time >= 0 && time < totalTime->floatValue()) playTrigger->trigger();
+	if (mtcReceiver->isPlaying && !isPlaying->boolValue() && time >= 0 && time < totalTime->floatValue()) playTrigger->trigger();
 	setCurrentTime(time, isJump, seekMode);
 }

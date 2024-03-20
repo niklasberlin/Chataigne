@@ -8,6 +8,8 @@
   ==============================================================================
 */
 
+#include "Module/ModuleIncludes.h"
+
 PosiStageNetModule::PosiStageNetModule() :
 	Module(getDefaultTypeString()),
 	Thread("PosiStageNet")
@@ -25,6 +27,8 @@ PosiStageNetModule::PosiStageNetModule() :
 	isConnected->setControllableFeedbackOnly(true);
 
 	connectionFeedbackRef = isConnected;
+
+	defManager->add(CommandDefinition::createDef(this, "", "Set Position", &PosiStageNetCommand::create, CommandContext::BOTH)->addParam("action", PosiStageNetCommand::SET_POSITION));
 
 	setupSlots();
 	setupMulticast();
@@ -63,6 +67,8 @@ void PosiStageNetModule::setupSlots()
 
 void PosiStageNetModule::setupMulticast()
 {
+	GenericScopedLock lock(udpLock);
+
 	if (udp != nullptr) udp.reset();
 
 	stopThread(1000);
@@ -109,13 +115,14 @@ void PosiStageNetModule::setupMulticast()
 
 void PosiStageNetModule::setPositionAt(int slotID, Vector3D<float> pos)
 {
-	if (slotID <= 0 || slotID > slotValues.size()) return;
-	SlotValue* s = slotValues[slotID - 1];
+	if (slotID < 0 || slotID >= slotValues.size() - 1) return;
+	SlotValue* s = slotValues[slotID];
 	s->position->setVector(pos);
 }
 
 void PosiStageNetModule::sendSlotsData(long timestamp)
 {
+
 	std::list<std::string> data_packets;
 	{
 		GenericScopedLock lock(trackerLock);
@@ -126,6 +133,7 @@ void PosiStageNetModule::sendSlotsData(long timestamp)
 
 	if (logOutgoingData->boolValue()) NLOG(niceName, "Sending PSN_DATA_PACKET, Frame Id =  " << (int)psn_encoder.get_last_info_frame_id() << ", Packet Count : " << (int)data_packets.size());
 
+	GenericScopedLock lock(udpLock);
 	for (auto it = data_packets.begin(); it != data_packets.end(); ++it)
 	{
 		udp->write(multiCastAddress->value, multiCastPort->value, it->c_str(), (int)it->size());
@@ -134,6 +142,7 @@ void PosiStageNetModule::sendSlotsData(long timestamp)
 
 void PosiStageNetModule::sendSlotsInfo(long timestamp)
 {
+
 	std::list<std::string> info_packets;
 	{
 		GenericScopedLock lock(trackerLock);
@@ -144,6 +153,7 @@ void PosiStageNetModule::sendSlotsInfo(long timestamp)
 
 	if (logOutgoingData->boolValue())  NLOG(niceName, "Sending PSN_INFO_PACKET, Frame Id =  " << (int)psn_encoder.get_last_info_frame_id() << ", Packet Count : " << (int)info_packets.size());
 
+	GenericScopedLock lock(udpLock);
 	for (auto it = info_packets.begin(); it != info_packets.end(); ++it)
 		udp->write(multiCastAddress->value, multiCastPort->value, it->c_str(), (int)it->size());
 }
